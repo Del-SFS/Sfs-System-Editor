@@ -28,7 +28,7 @@ function prsRefreshNamedTabs(){
   });
 }
 
-
+function prsRefreshSystemTab(){
   const btn = document.getElementById('prs-tab-system');
   if(!btn) return;
   const hasSystem = Object.keys(systemPresets).length > 0;
@@ -174,7 +174,8 @@ function openPreset(forCenter){
   _prsTab = 'all';
   _prsSearch = '';
 
-  // Reset tab UI
+  // Reset tab UI — rebuild named tabs first so the forEach includes them
+  prsRefreshNamedTabs();
   document.querySelectorAll('.prs-tab').forEach((t,i)=>t.classList.toggle('on', i===0));
   const searchEl = document.getElementById('prs-search');
   if(searchEl) searchEl.value = '';
