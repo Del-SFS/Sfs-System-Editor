@@ -11,7 +11,24 @@ function prsSetTab(tab, btn){
 }
 
 // Show/hide the SYSTEM tab and update its label based on loaded system
-function prsRefreshSystemTab(){
+function prsRefreshNamedTabs(){
+  const tabBar = document.querySelector('.prs-tabs');
+  if(!tabBar) return;
+  // Remove any previously injected named tabs
+  tabBar.querySelectorAll('.prs-tab-named').forEach(t => t.remove());
+  if(typeof dynamicPresetSources === 'undefined') return;
+  Object.keys(dynamicPresetSources).forEach(label => {
+    const btn = document.createElement('button');
+    btn.className = 'prs-tab prs-tab-named';
+    btn.textContent = '🚀 ' + label;
+    btn.onclick = function(){ prsSetTab(label, this); };
+    // Insert before the system tab
+    const sysTab = document.getElementById('prs-tab-system');
+    tabBar.insertBefore(btn, sysTab);
+  });
+}
+
+
   const btn = document.getElementById('prs-tab-system');
   if(!btn) return;
   const hasSystem = Object.keys(systemPresets).length > 0;
@@ -72,6 +89,18 @@ function prsRebuild(){
       hdr.textContent = `🚀 ${systemPresetsName || 'Loaded System'}`;
       grid.appendChild(hdr);
       systemItems.forEach(p => grid.appendChild(makePrsCard(p)));
+    }
+    // Named import buckets (BGH etc.)
+    if(typeof dynamicPresetSources !== 'undefined'){
+      Object.keys(dynamicPresetSources).forEach(label => {
+        const namedItems = filtered.filter(p => p.category === label);
+        if(!namedItems.length) return;
+        const hdr = document.createElement('div');
+        hdr.className = 'prs-group-hdr';
+        hdr.textContent = '🚀 ' + label;
+        grid.appendChild(hdr);
+        namedItems.forEach(p => grid.appendChild(makePrsCard(p)));
+      });
     }
   } else {
     filtered.forEach(p => grid.appendChild(makePrsCard(p)));

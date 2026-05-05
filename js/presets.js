@@ -125,6 +125,17 @@ function buildAllPresets(){
     const meta = inferPresetMeta(name, data);
     list.push({ key:name, name, category:'custom', data:JSON.parse(JSON.stringify(data)), ...meta });
   });
+
+  // Named import buckets (e.g. BGH) — each gets its own category key
+  if(typeof dynamicPresetSources !== 'undefined'){
+    Object.entries(dynamicPresetSources).forEach(([label, src]) => {
+      Object.entries(src.presets).forEach(([name, data]) => {
+        const meta = inferPresetMeta(name, data);
+        list.push({ key:name, name, category:label, data:JSON.parse(JSON.stringify(data)), ...meta });
+      });
+    });
+  }
+
   Object.entries(systemPresets).forEach(([name, data]) => {
     const meta = inferPresetMeta(name, data);
     list.push({ key:name, name, category:'system', data:JSON.parse(JSON.stringify(data)), ...meta });
