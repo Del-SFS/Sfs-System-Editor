@@ -375,13 +375,10 @@ async function importFeatured(url, displayName){
     }
 
     setBar1(100, 'DECOMPRESSING');
-    // Derive a short label from the zip name (e.g. "BGH Full Release-1.2.1.zip" → "BGH Full Release")
-    const _namedCat = displayName.replace(/\.zip$/i,'').replace(/-?\d+(\.\d+)*$/, '').trim();
     const res = await _loadSFSAssetBuffer(
       buffer, displayName,
       pct => setBar1(pct, 'DECOMPRESSING'),
-      pct => setBar2(pct),
-      _namedCat
+      pct => setBar2(pct)
     );
 
     // Show completion state on the overlay, then auto-dismiss
@@ -396,8 +393,7 @@ async function importFeatured(url, displayName){
     if(spinner){ spinner.style.display = ''; }
     setLoadingTitle('LOADING SYSTEM');
     setLoadingMsg('Reading zip…');
-    // Refresh preset modal tabs and grid if open
-    if(typeof prsRefreshNamedTabs === 'function') prsRefreshNamedTabs();
+    // Refresh preset modal if it's open
     if(typeof prsRebuild === 'function') prsRebuild();
   } catch(err){
     hideLoading(); hideLoadingBars();
@@ -584,11 +580,8 @@ async function autoLoadRemoteAssets(){
 }
 
 // ── Dynamic preset store — populated when asset zips are loaded ──────────────
-// vanilla/custom are the two built-in categories from the autoload zips.
-// namedSources holds presets from named imports (e.g. BGH), keyed by a short
-// display label derived from the zip filename.
+// Overrides FILE_PRESETS when populated. Each key is a preset name, value is data.
 const dynamicPresets = { vanilla: {}, custom: {} };
-const dynamicPresetSources = {}; // { label: { presets:{}, zipName:'' } }
 
 // Returns true if a zip path belongs to a heightmap folder (skip everything there)
 function _isHeightmapPath(pathLower){
@@ -624,7 +617,7 @@ function _parsePresetTxt(raw, filename){
 // Accepts one or more zips containing any combination of:\n//   */Planet Data/*.txt       → preset files (vanilla or custom)\n//   */Texture Data/*.(img)    → textures\n//   */Heightmap Data/*.txt    → heightmaps (JSON points)\n//   */Heightmap Data/*.(img)  → heightmaps (PNG/JPG alpha-encoded)\n//   (legacy) flat image files  → textures (backwards compat with old texture-only zips)
 
 // Core single-zip processor — used by both manual upload and remote auto-load.
-async function _loadSFSAssetBuffer(buffer, zipName, onDecompProgress, onTexProgress, namedCategory){
+async function _loadSFSAssetBuffer(buffer, zipName, onDecompProgress, onTexProgress){
   const rawEntries = parseZip(buffer);
   const entries = await decompressEntries(rawEntries, onDecompProgress);
   let totalTextures = 0, totalPresets = 0, errors = 0;
@@ -678,14 +671,8 @@ async function _loadSFSAssetBuffer(buffer, zipName, onDecompProgress, onTexProgr
       const parsed = _parsePresetTxt(dec);
       if(parsed){
         const pname = filename.replace(/\.txt$/i, '').trim();
-        if(namedCategory){
-          // Named import (e.g. BGH) — store in its own bucket, never touch vanilla/custom
-          if(!dynamicPresetSources[namedCategory]) dynamicPresetSources[namedCategory] = { presets:{}, zipName };
-          dynamicPresetSources[namedCategory].presets[pname] = parsed;
-        } else {
-          const cat = _presetCategory(pathLower) || 'custom';
-          dynamicPresets[cat][pname] = parsed;
-        }
+        const cat = _presetCategory(pathLower) || 'custom';
+        dynamicPresets[cat][pname] = parsed;
         totalPresets++;
       } else { errors++; }
       continue;
