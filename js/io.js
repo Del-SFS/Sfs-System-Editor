@@ -378,10 +378,18 @@ async function importFeatured(url, displayName){
       pct => setBar2(pct)
     );
 
-    hideLoading(); hideLoadingBars();
-    const msg = `Imported from "${displayName}":\n  ${res.totalTextures} texture(s)  |  ${res.totalPresets} preset(s)` +
-                (res.errors ? `\n  ${res.errors} error(s) — check console` : '');
-    alert(msg);
+    // Show completion state on the overlay, then auto-dismiss
+    hideLoadingBars();
+    const spinner = document.querySelector('#loading-overlay .loading-spinner');
+    if(spinner){ spinner.style.display = 'none'; }
+    setLoadingTitle('IMPORT COMPLETE');
+    const errNote = res.errors ? `  ·  ${res.errors} error(s)` : '';
+    setLoadingMsg(`${res.totalTextures} texture(s)  ·  ${res.totalPresets} preset(s)${errNote}`);
+    await new Promise(r => setTimeout(r, 2000));
+    hideLoading();
+    if(spinner){ spinner.style.display = ''; }
+    setLoadingTitle('LOADING SYSTEM');
+    setLoadingMsg('Reading zip…');
   } catch(err){
     hideLoading(); hideLoadingBars();
     console.error('Featured import error:', err);
