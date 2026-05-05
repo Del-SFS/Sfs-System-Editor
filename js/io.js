@@ -337,12 +337,56 @@ async function loadZipFile(file){
 }
 
 
-// ── Download a featured zip to disk without opening it in the editor ──
-async function downloadFeatured(url, displayName){
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = displayName;
-  a.click();
+// ── Import a featured zip — loads assets only, does NOT open/switch the system ──
+async function importFeatured(url, displayName){
+  showLoading(); showLoadingBars();
+  setLoadingTitle('IMPORTING ASSETS');
+  setLoadingMsg('Downloading ' + displayName + '…');
+  try {
+    setBar1(0, 'DOWNLOADING');
+    const resp = await fetch(url);
+    if(!resp.ok) throw new Error(`HTTP ${resp.status} — could not fetch ${displayName}`);
+
+    const contentLength = resp.headers.get('Content-Length');
+    let buffer;
+    if(contentLength){
+      const total = parseInt(contentLength, 10);
+      const reader = resp.body.getReader();
+      const chunks = [];
+      let received = 0;
+      while(true){
+        const {done, value} = await reader.read();
+        if(done) break;
+        chunks.push(value);
+        received += value.length;
+        setBar1(received / total * 100);
+      }
+      const full = new Uint8Array(received);
+      let off = 0;
+      for(const c of chunks){ full.set(c, off); off += c.length; }
+      buffer = full.buffer;
+    } else {
+      setBar1(50, 'DOWNLOADING…');
+      buffer = await resp.arrayBuffer();
+      setBar1(100);
+    }
+
+    setBar1(100, 'DECOMPRESSING');
+    const res = await _loadSFSAssetBuffer(
+      buffer, displayName,
+      pct => setBar1(pct, 'DECOMPRESSING'),
+      pct => setBar2(pct)
+    );
+
+    hideLoading(); hideLoadingBars();
+    const msg = `Imported from "${displayName}":\n  ${res.totalTextures} texture(s)  |  ${res.totalPresets} preset(s)` +
+                (res.errors ? `\n  ${res.errors} error(s) — check console` : '');
+    alert(msg);
+  } catch(err){
+    hideLoading(); hideLoadingBars();
+    console.error('Featured import error:', err);
+    alert('Failed to import "' + displayName + '":\n' + err.message);
+  }
 }
 
 // ── Load a system zip directly from a URL (used by Featured Systems cards) ──
