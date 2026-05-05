@@ -339,6 +339,9 @@ async function loadZipFile(file){
 
 // ── Import a featured zip — loads assets only, does NOT open/switch the system ──
 async function importFeatured(url, displayName){
+  // Wait for startup autoload to finish so we don't clobber dynamicPresets mid-flight
+  if(_autoLoadPromise){ try{ await _autoLoadPromise; } catch(_){} }
+
   showLoading(); showLoadingBars();
   setLoadingTitle('IMPORTING ASSETS');
   setLoadingMsg('Downloading ' + displayName + '…');
@@ -390,6 +393,8 @@ async function importFeatured(url, displayName){
     if(spinner){ spinner.style.display = ''; }
     setLoadingTitle('LOADING SYSTEM');
     setLoadingMsg('Reading zip…');
+    // Refresh preset modal if it's open
+    if(typeof prsRebuild === 'function') prsRebuild();
   } catch(err){
     hideLoading(); hideLoadingBars();
     console.error('Featured import error:', err);
@@ -474,6 +479,7 @@ const REMOTE_ASSETS_URLS = [
 // Auto-fetch remote asset zip on startup (online users only).
 // Falls back gracefully if offline or URL is null.
 let _remoteAbortCtrl = null;
+let _autoLoadPromise = null;   // resolves when startup autoload finishes (or fails)
 function cancelRemoteAssets(){ if(_remoteAbortCtrl) _remoteAbortCtrl.abort(); }
 
 async function autoLoadRemoteAssets(){
@@ -766,5 +772,5 @@ setTimeout(resizeViewport, 50);
 // Attach unit parsers to distance input fields
 setTimeout(initUnitInputs, 100);
 // Auto-fetch remote assets if URL is configured (no-op when REMOTE_ASSETS_URL is null)
-autoLoadRemoteAssets();
+_autoLoadPromise = autoLoadRemoteAssets();
 
