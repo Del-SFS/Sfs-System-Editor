@@ -913,6 +913,7 @@ body {
   background: var(--ac12); border: 1px solid var(--ac20); color: var(--sky2);
 }
 .prs-card-badge.custom { background: rgba(255,180,64,.08); border-color: rgba(255,180,64,.25); color: var(--amber); }
+.prs-card-badge.system { background: rgba(64,204,128,.08); border-color: rgba(64,204,128,.25); color: #40cc80; }
 
 .prs-empty { color: var(--ink4); font-family: 'JetBrains Mono',monospace; font-size: .65rem; text-align: center; padding: 30px 10px; }
 

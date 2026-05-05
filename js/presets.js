@@ -98,6 +98,11 @@ function inferPresetMeta(name, data){
   return {id:'moon', icon:'🌑', color:'#888888,#444444', glow:'#999999'};
 }
 
+// ── System presets — populated from the most recently loaded system zip ──────
+// Key = body name, value = body data object. Cleared on each new system load.
+const systemPresets = {};
+let   systemPresetsName = ''; // display name of the loaded system
+
 // Build a flat list of all presets for use throughout the system.
 // If dynamicPresets have been loaded from a zip, those take priority over
 // the baked-in FILE_PRESETS (dynamic entries can add new ones or override existing).
@@ -119,6 +124,10 @@ function buildAllPresets(){
   Object.entries(customSrc).forEach(([name, data]) => {
     const meta = inferPresetMeta(name, data);
     list.push({ key:name, name, category:'custom', data:JSON.parse(JSON.stringify(data)), ...meta });
+  });
+  Object.entries(systemPresets).forEach(([name, data]) => {
+    const meta = inferPresetMeta(name, data);
+    list.push({ key:name, name, category:'system', data:JSON.parse(JSON.stringify(data)), ...meta });
   });
 
   return list;

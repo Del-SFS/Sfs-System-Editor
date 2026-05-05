@@ -1,6 +1,6 @@
 // ════════════════════════════════ PRESET MODAL ════════════════════════════════
 // Preset modal state
-let _prsTab = 'all';       // 'all' | 'vanilla' | 'custom'
+let _prsTab = 'all';       // 'all' | 'vanilla' | 'custom' | 'system'
 let _prsSearch = '';
 
 function prsSetTab(tab, btn){
@@ -8,6 +8,20 @@ function prsSetTab(tab, btn){
   document.querySelectorAll('.prs-tab').forEach(t => t.classList.remove('on'));
   btn.classList.add('on');
   prsRebuild();
+}
+
+// Show/hide the SYSTEM tab and update its label based on loaded system
+function prsRefreshSystemTab(){
+  const btn = document.getElementById('prs-tab-system');
+  if(!btn) return;
+  const hasSystem = Object.keys(systemPresets).length > 0;
+  btn.style.display = hasSystem ? '' : 'none';
+  btn.textContent = hasSystem ? `🚀 ${systemPresetsName || 'SYSTEM'}` : '';
+  // If currently on system tab but system was cleared, fall back to all
+  if(!hasSystem && _prsTab === 'system'){
+    _prsTab = 'all';
+    document.querySelectorAll('.prs-tab').forEach((t,i) => t.classList.toggle('on', i===0));
+  }
 }
 
 function prsRebuild(){
@@ -37,6 +51,7 @@ function prsRebuild(){
   if(_prsTab === 'all'){
     const vanillaItems = filtered.filter(p => p.category === 'vanilla');
     const customItems  = filtered.filter(p => p.category === 'custom');
+    const systemItems  = filtered.filter(p => p.category === 'system');
     if(vanillaItems.length){
       const hdr = document.createElement('div');
       hdr.className = 'prs-group-hdr';
@@ -50,6 +65,13 @@ function prsRebuild(){
       hdr.textContent = '⭐ Custom Presets';
       grid.appendChild(hdr);
       customItems.forEach(p => grid.appendChild(makePrsCard(p)));
+    }
+    if(systemItems.length){
+      const hdr = document.createElement('div');
+      hdr.className = 'prs-group-hdr';
+      hdr.textContent = `🚀 ${systemPresetsName || 'Loaded System'}`;
+      grid.appendChild(hdr);
+      systemItems.forEach(p => grid.appendChild(makePrsCard(p)));
     }
   } else {
     filtered.forEach(p => grid.appendChild(makePrsCard(p)));
@@ -104,8 +126,8 @@ function makePrsCard(p){
   card.innerHTML =
     `<span class="prs-card-name">${p.name}</span>` +
     (sub ? `<span class="prs-card-sub">${sub}</span>` : '') +
-    `<span class="prs-card-badge${p.category==='custom'?' custom':''}">` +
-    `${p.category==='custom'?'CUSTOM':'SFS'}</span>`;
+    `<span class="prs-card-badge${p.category==='custom'?' custom':p.category==='system'?' system':''}">` +
+    `${p.category==='custom'?'CUSTOM':p.category==='system'?'SYS':'SFS'}</span>`;
   card.insertBefore(ic, card.firstChild);
 
   card.onclick = () => {

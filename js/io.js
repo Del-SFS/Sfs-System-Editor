@@ -315,6 +315,18 @@ async function loadZipFile(file){
     refreshTexPickerLists();
     updateAssetEmptyState();
     console.log(`[SFS|LOAD] done — ${planetCount} bodies, textureCache keys: [${Object.keys(textureCache).join(',')}]`);
+
+    // ── Populate system presets from loaded bodies ─────────────────────
+    // Clear previous system presets and repopulate from the newly loaded bodies.
+    Object.keys(systemPresets).forEach(k => delete systemPresets[k]);
+    const systemName = file.name.replace(/\.zip$/i, '');
+    systemPresetsName = systemName;
+    Object.entries(bodies).forEach(([name, b]) => {
+      systemPresets[name] = JSON.parse(JSON.stringify(b.data));
+    });
+    // Show/hide the SYSTEM tab in the preset modal based on whether bodies loaded
+    prsRefreshSystemTab();
+
     setTimeout(() => { hideLoading(); hideLoadingBars(); setLoadingTitle('LOADING SYSTEM'); goNew(); setTimeout(() => { console.log('[SFS|LOAD] delayed redraw, textureCache:', Object.keys(textureCache)); drawViewport(); }, 500); }, 350);
 
   } catch(err){
@@ -324,6 +336,14 @@ async function loadZipFile(file){
   }
 }
 
+
+// ── Download a featured zip to disk without opening it in the editor ──
+async function downloadFeatured(url, displayName){
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = displayName;
+  a.click();
+}
 
 // ── Load a system zip directly from a URL (used by Featured Systems cards) ──
 // GitHub raw URLs are CORS-blocked, so we mirror through jsDelivr CDN.
