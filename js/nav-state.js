@@ -61,3 +61,8 @@ function goNewFromOpen(){
   goNew();
 }
 
+
+
+function goFeatured(){
+  show('s-featured');
+}

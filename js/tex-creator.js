@@ -18,6 +18,7 @@ const TC = (() => {
   let _gradients   = [];   // array of gradient objects
   let _activeGrad  = -1;  // index into _gradients
   let _baseTexture = null; // offscreen canvas: loaded texture used as base layer under gradients
+  let _flareLayer  = null; // offscreen canvas: generated flares, composited below gradients
 
   // Offscreen draw canvas (the actual texture data)
   let _drawCanvas = null;
@@ -27,7 +28,12 @@ const TC = (() => {
   let _pvZoom      = 1;
   let _pvPanX      = 0;
   let _pvPanY      = 0;
-  let _pvAtmoScale = 1.45; // atmoR = planetR * _pvAtmoScale
+  // Preview atmosphere: physics-based sizing matching viewport
+  // atmoR = planetR * (1 + _pvGradH_km / _pvPlanetR_km)
+  let _pvPlanetR_km = 6371;   // planet radius in km (Earth default)
+  let _pvGradH_km   = 600;    // gradient height in km  → atmoScale ~1.094×
+  // Derived: atmoScale = 1 + gradH/planetR
+  function _pvAtmoScale(){ return 1 + _pvGradH_km / _pvPlanetR_km; }
 
   // DOM refs
   let _el = {}; // populated in init()
@@ -61,11 +67,17 @@ const TC = (() => {
   // ── Compose all gradients onto the draw canvas ─────────────────────
   function _composeGradients(){
     _drawCtx.clearRect(0, 0, TEX_W, TEX_H);
-    // Draw base texture first (loaded image sits under all gradient layers)
+    // 1. Base loaded texture (bottom-most)
     if(_baseTexture){
       _drawCtx.globalCompositeOperation = 'source-over';
       _drawCtx.globalAlpha = 1;
       _drawCtx.drawImage(_baseTexture, 0, 0, TEX_W, TEX_H);
+    }
+    // 2. Flare layer (generated flares sit above loaded texture, below gradients)
+    if(_flareLayer){
+      _drawCtx.globalCompositeOperation = 'source-over';
+      _drawCtx.globalAlpha = 1;
+      _drawCtx.drawImage(_flareLayer, 0, 0, TEX_W, TEX_H);
     }
     if(_gradients.length === 0){ _drawCtx.globalCompositeOperation = 'source-over'; return; }
 
@@ -139,130 +151,171 @@ const TC = (() => {
   }
 
   // ── Render the preview (atmosphere disc) with pan/zoom ────────────
+  // Matches viewport.js rendering exactly:
+  //   1. Starfield
+  //   2. Planet disc (solid colour behind atmo)
+  //   3. Atmosphere polar-warp disc — 'source-over' for planets-with-terrain,
+  //      'lighter' for stars/no-terrain (the default for a raw texture preview)
+  //      The polar canvas inner zone (inside innerFracClamped) is filled with
+  //      the texture's bottom-row colour so there is no black gap ring.
+  //   4. Planet disc clipped ON TOP to mask the atmosphere inner edge — this is
+  //      what creates the clean limb; the atmosphere does NOT overdraw the planet.
   function _renderPreview(){
     const cv = _el.previewCanvas;
     if(!cv || !_drawCanvas) return;
-    const ctx  = cv.getContext('2d');
-    const W    = cv.width, H = cv.height;
+    const ctx = cv.getContext('2d');
+    const W = cv.width, H = cv.height;
     ctx.clearRect(0, 0, W, H);
 
-    // Starfield bg (fixed, not affected by pan/zoom)
+    // ── 1. Starfield background ──────────────────────────────────────
     ctx.fillStyle = '#090912';
     ctx.fillRect(0, 0, W, H);
-    for(let i=0;i<120;i++){
+    for(let i = 0; i < 120; i++){
       const sx = (Math.sin(i*137.5)*0.5+0.5)*W;
-      const sy = (Math.cos(i*97.1)*0.5+0.5)*H;
-      ctx.globalAlpha = (Math.sin(i*73.1)*0.3+0.4);
-      ctx.fillStyle='#ffffff';
-      ctx.beginPath(); ctx.arc(sx,sy,Math.sin(i*53.7)*0.4+0.5,0,Math.PI*2); ctx.fill();
+      const sy = (Math.cos(i*97.1 )*0.5+0.5)*H;
+      ctx.globalAlpha = Math.sin(i*73.1)*0.3+0.4;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.arc(sx, sy, Math.sin(i*53.7)*0.4+0.5, 0, Math.PI*2); ctx.fill();
     }
-    ctx.globalAlpha=1;
+    ctx.globalAlpha = 1;
 
-    // Planet center with pan/zoom applied
+    // ── Geometry ─────────────────────────────────────────────────────
     const basePlanetR = Math.min(W, H) * 0.22;
-    const planetR = basePlanetR * _pvZoom;
-    const atmoR   = planetR * _pvAtmoScale;
+    const planetR  = basePlanetR * _pvZoom;
+    const atmoR    = planetR * _pvAtmoScale(); // outer atmosphere radius
     const cx = W/2 + _pvPanX;
     const cy = H/2 + _pvPanY;
 
-    // Build polar warp from texture
-    const srcX  = _drawCanvas.getContext('2d');
-    const srcD  = srcX.getImageData(0, 0, TEX_W, TEX_H).data;
-    const SW = TEX_W, SH = TEX_H;
+    // innerFrac: fraction of the polar disc that is "inside the planet"
+    // matches viewport: innerFrac = physR_px / drawR  =  planetR / atmoR
+    const innerFrac        = planetR / atmoR;
+    const innerFracClamped = Math.min(0.999, innerFrac);
 
-    const SZ = 256;
-    const pC  = document.createElement('canvas');
-    pC.width = SZ; pC.height = SZ;
-    const pX  = pC.getContext('2d');
-    const outD = pX.createImageData(SZ, SZ);
-    const od   = outD.data;
+    // ── 2. Build polar-warp canvas (matches viewport._atmoPolarCache logic) ──
+    // Resolution: use 512 for quality (viewport uses up to 512 for thin atmos)
+    const SZ   = 512;
     const half = SZ / 2;
-    const innerFracC = Math.min(0.999, 1 / _pvAtmoScale);
+    const SW = TEX_W, SH = TEX_H;
+    const srcD = _drawCtx.getImageData(0, 0, SW, SH).data;
 
-    // Pre-sample innermost row (surface colour)
-    let ir=0,ig=0,ib=0,ia=255;
+    // Sample bottom row average — fills the inner zone to avoid black gap ring
+    // (viewport does exactly the same: inner_r/g/b/a from innerRow = SH-1)
+    let inner_r=255, inner_g=255, inner_b=255, inner_a=255;
     {
+      let rS=0, gS=0, bS=0, aS=0;
       const row = SH - 1;
-      let rs=0,gs=0,bs=0,as_=0,cnt=0;
-      for(let ix=0;ix<SW;ix++){
-        const ii=(row*SW+ix)*4;
-        rs+=srcD[ii];gs+=srcD[ii+1];bs+=srcD[ii+2];as_+=srcD[ii+3];cnt++;
+      for(let ix = 0; ix < SW; ix++){
+        const ii = (row*SW + ix)*4;
+        rS += srcD[ii]; gS += srcD[ii+1]; bS += srcD[ii+2]; aS += srcD[ii+3];
       }
-      ir=rs/cnt+.5|0;ig=gs/cnt+.5|0;ib=bs/cnt+.5|0;ia=as_/cnt+.5|0;
+      inner_r = rS/SW+.5|0; inner_g = gS/SW+.5|0;
+      inner_b = bS/SW+.5|0; inner_a = aS/SW+.5|0;
     }
 
-    for(let py=0;py<SZ;py++){
-      for(let ppx=0;ppx<SZ;ppx++){
-        const dx=ppx-half, dy=py-half;
-        const dist=Math.sqrt(dx*dx+dy*dy);
-        const radFrac=dist/half;
-        const oi=(py*SZ+ppx)*4;
-        if(radFrac>1.0){od[oi+3]=0;continue;}
-        if(radFrac<=innerFracC){
-          od[oi]=ir;od[oi+1]=ig;od[oi+2]=ib;od[oi+3]=ia;continue;
+    // Derive planet surface colour from inner_r/g/b (same data, not a separate sample)
+    const toMid   = c => c * 0.55 + 0.5 | 0;
+    const toShade = c => c * 0.18 + 0.5 | 0;
+    const midCol   = `rgb(${toMid(inner_r)},${toMid(inner_g)},${toMid(inner_b)})`;
+    const shadeCol = `rgb(${toShade(inner_r)},${toShade(inner_g)},${toShade(inner_b)})`;
+
+    const polarC = document.createElement('canvas');
+    polarC.width = SZ; polarC.height = SZ;
+    const pCtx = polarC.getContext('2d');
+    const outD = pCtx.createImageData(SZ, SZ);
+    const od   = outD.data;
+
+    for(let py = 0; py < SZ; py++){
+      for(let ppx = 0; ppx < SZ; ppx++){
+        const dx = ppx - half, dy = py - half;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        const radFrac = dist / half;
+        const oi = (py*SZ + ppx)*4;
+
+        if(radFrac > 1.0){ od[oi+3] = 0; continue; }
+
+        // Inner zone: fill with bottom-row colour so no black gap ring
+        if(radFrac <= innerFracClamped){
+          od[oi]=inner_r; od[oi+1]=inner_g; od[oi+2]=inner_b; od[oi+3]=inner_a;
+          continue;
         }
-        let cwAngle=Math.atan2(dy,dx)/(Math.PI*2);
-        if(cwAngle<0) cwAngle+=1;
-        const u=(1-cwAngle)%1;
-        const t=(radFrac-innerFracC)/(1-innerFracC);
-        const texRowF=(1-t)*(SH-1);
-        const sx=Math.min(SW-1,Math.max(0,Math.round(u*(SW-1))));
-        const sy0=Math.min(SH-1,Math.max(0,Math.floor(texRowF)));
-        const sy1=Math.min(SH-1,sy0+1);
-        const fy=texRowF-sy0;
-        const si0=(sy0*SW+sx)*4;
-        const si1=(sy1*SW+sx)*4;
-        od[oi]  =srcD[si0]  +(srcD[si1]  -srcD[si0]  )*fy+.5|0;
-        od[oi+1]=srcD[si0+1]+(srcD[si1+1]-srcD[si0+1])*fy+.5|0;
-        od[oi+2]=srcD[si0+2]+(srcD[si1+2]-srcD[si0+2])*fy+.5|0;
-        od[oi+3]=srcD[si0+3]+(srcD[si1+3]-srcD[si0+3])*fy+.5|0;
+
+        // Atmosphere band: polar → rectangular UV mapping (matches viewport)
+        let cwAngle = Math.atan2(dy, dx) / (Math.PI*2);
+        if(cwAngle < 0) cwAngle += 1;
+        const u = (1 - cwAngle) % 1;
+
+        // t=0 → innerFrac (surface), t=1 → outer edge
+        // texRowF=SH-1 at surface (t=0), texRowF=0 at outer edge (t=1)
+        const t = (radFrac - innerFracClamped) / (1 - innerFracClamped);
+        const texRowF = (1 - t) * (SH - 1);
+
+        const sx  = Math.min(SW-1, Math.max(0, Math.round(u * (SW-1))));
+        const sy0 = Math.min(SH-1, Math.max(0, Math.floor(texRowF)));
+        const sy1 = Math.min(SH-1, sy0 + 1);
+        const fy  = texRowF - sy0;
+        const si0 = (sy0*SW + sx)*4;
+        const si1 = (sy1*SW + sx)*4;
+        od[oi]   = srcD[si0]   + (srcD[si1]   - srcD[si0])   * fy + 0.5 | 0;
+        od[oi+1] = srcD[si0+1] + (srcD[si1+1] - srcD[si0+1]) * fy + 0.5 | 0;
+        od[oi+2] = srcD[si0+2] + (srcD[si1+2] - srcD[si0+2]) * fy + 0.5 | 0;
+        od[oi+3] = srcD[si0+3] + (srcD[si1+3] - srcD[si0+3]) * fy + 0.5 | 0;
       }
     }
-    pX.putImageData(outD, 0, 0);
+    pCtx.putImageData(outD, 0, 0);
 
-    // Planet surface (behind atmo)
-    // Sample the bottom-center pixel of the texture to get the surface color
-    // (bottom row = planet surface level in the atmosphere texture)
-    const surfSample = _drawCtx.getImageData(Math.floor(TEX_W / 2), TEX_H - 1, 1, 1).data;
-    const sR = surfSample[0], sG = surfSample[1], sB = surfSample[2];
-    // Derive a darker midtone and a deeper shadow from the sampled color
-    // midtone: 55% brightness, shadow: 18% brightness, both desaturated slightly toward grey
-    const toMid   = (c) => Math.round(c * 0.55);
-    const toShade = (c) => Math.round(c * 0.18);
-    const midCol   = `rgb(${toMid(sR)},${toMid(sG)},${toMid(sB)})`;
-    const shadeCol = `rgb(${toShade(sR)},${toShade(sG)},${toShade(sB)})`;
+    // ── 3. Draw: planet disc → atmosphere disc → planet disc mask ────
+    // This matches viewport draw order exactly.
+
+    // 3a. Planet surface disc (drawn first, behind atmosphere)
     ctx.save();
     ctx.beginPath(); ctx.arc(cx, cy, planetR, 0, Math.PI*2);
-    const surfGrd = ctx.createRadialGradient(cx-planetR*.2, cy-planetR*.2, 0, cx, cy, planetR);
+    const surfGrd = ctx.createRadialGradient(cx - planetR*0.2, cy - planetR*0.2, 0, cx, cy, planetR);
     surfGrd.addColorStop(0, midCol);
     surfGrd.addColorStop(1, shadeCol);
     ctx.fillStyle = surfGrd;
     ctx.fill();
     ctx.restore();
 
-    // Atmosphere disc
+    // 3b. Atmosphere polar disc — clipped to atmoR circle.
+    //     Compositing: 'source-over' (normal blend).
+    //     The texture's alpha channel controls transparency so a gradient
+    //     that goes 0→opaque reads correctly without any extra multiply.
     ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
     ctx.beginPath(); ctx.arc(cx, cy, atmoR, 0, Math.PI*2);
     ctx.clip();
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.drawImage(pC, cx-atmoR, cy-atmoR, atmoR*2, atmoR*2);
+    ctx.drawImage(polarC, cx - atmoR, cy - atmoR, atmoR*2, atmoR*2);
     ctx.restore();
 
-    // Planet surface on top
+    // 3c. Planet disc clipped ON TOP — masks the atmosphere inner fill so only
+    //     the real atmosphere band shows, exactly as viewport does.
     ctx.save();
     ctx.beginPath(); ctx.arc(cx, cy, planetR, 0, Math.PI*2);
     ctx.clip();
-    const surf2 = ctx.createRadialGradient(cx-planetR*.2, cy-planetR*.2, 0, cx, cy, planetR);
+    const surf2 = ctx.createRadialGradient(cx - planetR*0.2, cy - planetR*0.2, 0, cx, cy, planetR);
     surf2.addColorStop(0, midCol);
     surf2.addColorStop(1, shadeCol);
     ctx.fillStyle = surf2;
     ctx.fill();
     ctx.restore();
 
-    // Limb highlight
+    // 3d. Subtle limb ring
     ctx.save();
     ctx.beginPath(); ctx.arc(cx, cy, planetR, 0, Math.PI*2);
-    ctx.strokeStyle='rgba(255,255,255,0.06)'; ctx.lineWidth=1; ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.restore();
+
+    // 3e. Atmosphere outer-edge drag handle — dashed ring at atmoR
+    // Shows the draggable edge users can grab to change gradient height
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx, cy, atmoR, 0, Math.PI*2);
+    ctx.strokeStyle = 'rgba(120,180,255,0.25)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 5]);
+    ctx.stroke();
+    ctx.setLineDash([]);
     ctx.restore();
   }
 
@@ -281,6 +334,10 @@ const TC = (() => {
     const baseH      = opts.baseH      ?? 0.18;
     // flareReach: max height a flare can reach (fraction from bottom, <=1)
     const flareReach = opts.flareReach ?? 0.88;
+    // lenEq: 0=fully random heights, 1=all flares same height (equalised)
+    const lenEq      = opts.lenEq      ?? 0;
+    // distEq: 0=fully random positions, 1=perfectly evenly spaced around circumference
+    const distEq     = opts.distEq     ?? 0;
 
     // Seedable RNG (mulberry32)
     let _s = (seed * 0x9e3779b9) >>> 0;
@@ -298,8 +355,7 @@ const TC = (() => {
     const bb = parseInt(bgColor.slice(5,7),16);
 
     // Fresh pixel buffer for the entire texture
-    _drawCtx.clearRect(0, 0, TEX_W, TEX_H);
-    const fd = _drawCtx.createImageData(TEX_W, TEX_H);
+    const fd = new ImageData(TEX_W, TEX_H);
     const fpx = fd.data;
 
     // Fill background
@@ -312,14 +368,33 @@ const TC = (() => {
     const flares = [];
     for(let fi = 0; fi < count; fi++){
       const baseW = minW + rng() * (maxW - minW);
-      // Each flare reaches a random height: at least baseH, up to flareReach
-      const height = baseH + rng() * (flareReach - baseH);
+      // Height is fully independent of baseH — baseH only controls the glow band thickness.
+      // Flares always root at the very bottom (y=0) regardless of band size.
+      const height = rng() * flareReach;
       flares.push({
         cx:     rng(),          // 0..1 horizontal center (wrapping)
-        baseHW: baseW * 0.5,    // half-width at the base (bottom)
-        tipHW:  baseW * 0.03,   // half-width at the tip — very narrow
-        height,                 // how far up (yFromBottom fraction) this flare goes
+        baseHW: baseW * 0.5,
+        tipHW:  baseW * 0.03,
+        height,
         peak:   0.5 + rng() * (bright - 0.5),
+      });
+    }
+
+    // ── Length equalisation ──────────────────────────────────────────
+    // Blend each flare's random height toward the mean height by lenEq factor
+    if(lenEq > 0){
+      const meanH = flares.reduce((s,f) => s + f.height, 0) / flares.length;
+      for(const f of flares) f.height = f.height + (meanH - f.height) * lenEq;
+    }
+
+    // ── Distance equalisation ────────────────────────────────────────
+    // Blend each flare's random cx toward its evenly-spaced slot by distEq factor
+    if(distEq > 0){
+      // Sort flares by current cx so slots are assigned in order
+      const sorted = flares.slice().sort((a,b) => a.cx - b.cx);
+      sorted.forEach((f, i) => {
+        const evenCx = i / flares.length; // evenly spaced 0..1
+        f.cx = f.cx + (evenCx - f.cx) * distEq;
       });
     }
 
@@ -397,7 +472,11 @@ const TC = (() => {
       }
     }
 
-    _drawCtx.putImageData(fd, 0, 0);
+    // Store into _flareLayer so _composeGradients can composite it persistently
+    _flareLayer = document.createElement('canvas');
+    _flareLayer.width  = TEX_W;
+    _flareLayer.height = TEX_H;
+    _flareLayer.getContext('2d').putImageData(fd, 0, 0);
   }
 
   // ── Refresh both views ─────────────────────────────────────────────
@@ -849,7 +928,7 @@ const TC = (() => {
     <div class="tc-sidebar">
       <div class="tc-tab-bar">
         <button class="tc-tab active" id="tc-tab-grad" data-tab="grad">GRADIENTS</button>
-        <button class="tc-tab tc-tab-soon" id="tc-tab-flare" data-tab="flare" disabled title="Coming soon">FLARES <span class="tc-soon-badge">SOON</span></button>
+        <button class="tc-tab" id="tc-tab-flare" data-tab="flare">FLARES</button>
       </div>
 
       <!-- ── GRADIENTS TAB ── -->
@@ -919,6 +998,16 @@ const TC = (() => {
             <input type="range" class="tc-range" id="tc-fl-seed" min="0" max="9999" step="1" value="42">
             <span class="tc-range-val" id="tc-fl-seed-val">42</span>
           </div>
+          <div class="tc-flare-row">
+            <label title="Pulls all flare heights toward the same length — 0% = fully random lengths, 100% = all flares the same height">LENGTH EQUALISATION</label>
+            <input type="range" class="tc-range" id="tc-fl-leneq" min="0" max="1" step="0.01" value="0">
+            <span class="tc-range-val" id="tc-fl-leneq-val">0%</span>
+          </div>
+          <div class="tc-flare-row">
+            <label title="Pulls flares toward even spacing — 0% = random positions, 100% = perfectly evenly distributed around the planet">DISTANCE EQUALISATION</label>
+            <input type="range" class="tc-range" id="tc-fl-disteq" min="0" max="1" step="0.01" value="0">
+            <span class="tc-range-val" id="tc-fl-disteq-val">0%</span>
+          </div>
           <div class="tc-flare-btns">
             <button class="tc-flare-gen-btn" id="tc-fl-gen">✦ GENERATE</button>
             <button class="tc-flare-rand-btn" id="tc-fl-rand">⟳ RANDOMISE</button>
@@ -931,9 +1020,13 @@ const TC = (() => {
     <div class="tc-canvas-area">
       <!-- Preview controls bar (shown only in preview mode) -->
       <div class="tc-preview-controls" id="tc-preview-controls" style="display:none">
-        <span class="tc-pvc-label">ATMO SIZE</span>
-        <input type="range" class="tc-range tc-pvc-range" id="tc-pv-atmo" min="1.1" max="4.0" step="0.05" value="1.45">
-        <span class="tc-range-val" id="tc-pv-atmo-val">1.45×</span>
+        <span class="tc-pvc-label" title="Planet radius in km — sets the base size ratio">PLANET R</span>
+        <input type="range" class="tc-range tc-pvc-range" id="tc-pv-planet-r" min="100" max="150000" step="50" value="6371">
+        <span class="tc-range-val" id="tc-pv-planet-r-val">6371 km</span>
+        <span class="tc-pvc-sep"></span>
+        <span class="tc-pvc-label" title="Gradient height in km — matches GRADIENT.height in planet JSON. Drag the top edge of the atmosphere ring in the preview to adjust.">GRAD H</span>
+        <input type="range" class="tc-range tc-pvc-range" id="tc-pv-grad-h" min="10" max="80000" step="10" value="600">
+        <span class="tc-range-val" id="tc-pv-grad-h-val">600 km</span>
         <span class="tc-pvc-sep"></span>
         <button class="tc-pvc-btn" id="tc-pv-reset" title="Reset pan/zoom">⊙ RESET</button>
       </div>
@@ -1018,7 +1111,7 @@ const TC = (() => {
         TEX_W = w; TEX_H = h;
         _initDrawCanvas();   // resize offscreen buffer
         _sizeCanvases();     // resize display canvas to match new aspect
-        _gradients = []; _activeGrad = -1;
+        _gradients = []; _activeGrad = -1; _baseTexture = null; _flareLayer = null;
         _renderGradientList(); _renderStopEditor(); _refresh();
       };
     }
@@ -1042,7 +1135,7 @@ const TC = (() => {
       _renderGradientList(); _renderStopEditor(); _refresh();
     };
     ov.querySelector('#tc-clear-all').onclick = () => {
-      _gradients = []; _activeGrad = -1; _baseTexture = null;
+      _gradients = []; _activeGrad = -1; _baseTexture = null; _flareLayer = null;
       _drawCtx.clearRect(0, 0, TEX_W, TEX_H);
       _renderGradientList(); _renderStopEditor(); _renderEditorCanvas();
       if(_mode === 'preview') _renderPreview();
@@ -1084,6 +1177,8 @@ const TC = (() => {
     _flV('tc-fl-bright',  'tc-fl-bright-val',  v => Math.round(v*100) + '%');
     _flV('tc-fl-bgalpha', 'tc-fl-bgalpha-val', v => Math.round(v*100) + '%');
     _flV('tc-fl-seed',    'tc-fl-seed-val',    v => v);
+    _flV('tc-fl-leneq',   'tc-fl-leneq-val',   v => Math.round(v*100) + '%');
+    _flV('tc-fl-disteq',  'tc-fl-disteq-val',  v => Math.round(v*100) + '%');
     _flR('tc-fl-color').oninput = () => { _flR('tc-fl-color-hex').textContent = _flR('tc-fl-color').value; };
     _flR('tc-fl-bg').oninput    = () => { _flR('tc-fl-bg-hex').textContent    = _flR('tc-fl-bg').value; };
 
@@ -1102,10 +1197,11 @@ const TC = (() => {
         flareReach: parseFloat(_flR('tc-fl-reach').value),
         bright:   parseFloat(_flR('tc-fl-bright').value),
         seed:     parseInt(_flR('tc-fl-seed').value),
+        lenEq:    parseFloat(_flR('tc-fl-leneq').value),
+        distEq:   parseFloat(_flR('tc-fl-disteq').value),
       });
       _renderGradientList();
-      _renderEditorCanvas();
-      if(_mode === 'preview') _renderPreview();
+      _refresh(); // composes _flareLayer into _drawCanvas so export always works
     };
 
     _flR('tc-fl-gen').onclick  = _doGenerateFlares;
@@ -1116,11 +1212,24 @@ const TC = (() => {
     };
 
     // ── Preview pan/zoom/atmo controls ──
-    const pvAtmoR = ov.querySelector('#tc-pv-atmo');
-    const pvAtmoV = ov.querySelector('#tc-pv-atmo-val');
-    pvAtmoR.oninput = () => {
-      _pvAtmoScale = parseFloat(pvAtmoR.value);
-      pvAtmoV.textContent = _pvAtmoScale.toFixed(2) + '×';
+    const pvPlanetRSlider = ov.querySelector('#tc-pv-planet-r');
+    const pvPlanetRVal    = ov.querySelector('#tc-pv-planet-r-val');
+    const pvGradHSlider   = ov.querySelector('#tc-pv-grad-h');
+    const pvGradHVal      = ov.querySelector('#tc-pv-grad-h-val');
+    const _syncPvLabels = () => {
+      pvPlanetRVal.textContent = Math.round(_pvPlanetR_km) + ' km';
+      pvGradHVal.textContent   = Math.round(_pvGradH_km)   + ' km';
+      pvPlanetRSlider.value = _pvPlanetR_km;
+      pvGradHSlider.value   = _pvGradH_km;
+    };
+    pvPlanetRSlider.oninput = () => {
+      _pvPlanetR_km = parseFloat(pvPlanetRSlider.value);
+      pvPlanetRVal.textContent = Math.round(_pvPlanetR_km) + ' km';
+      if(_mode==='preview') _renderPreview();
+    };
+    pvGradHSlider.oninput = () => {
+      _pvGradH_km = parseFloat(pvGradHSlider.value);
+      pvGradHVal.textContent = Math.round(_pvGradH_km) + ' km';
       if(_mode==='preview') _renderPreview();
     };
     ov.querySelector('#tc-pv-reset').onclick = () => {
@@ -1128,22 +1237,80 @@ const TC = (() => {
       if(_mode==='preview') _renderPreview();
     };
 
-    // Preview canvas drag to pan
-    let _pvDragging = false, _pvDragX = 0, _pvDragY = 0;
-    let _pvPinchDist = 0;
+    // ── Preview canvas interactions ───────────────────────────────────
+    // Three interaction modes:
+    //   1. Drag on the atmosphere outer-edge ring → adjust gradient height (km)
+    //   2. Drag elsewhere → pan
+    //   3. Scroll / pinch → zoom
+    //
+    // "Outer edge ring" = within ±12px of atmoR from the planet centre.
+    let _pvDragging    = false;  // panning
+    let _pvEdgeDrag    = false;  // dragging the atmosphere outer edge
+    let _pvDragX = 0, _pvDragY = 0;
+    let _pvEdgeDragStartY = 0, _pvEdgeStartGradH = 0;
+    let _pvPinchDist   = 0;
     const _pvCanvas = _el.previewCanvas;
+
+    // Returns the current atmoR in canvas pixels for hit-testing
+    const _pvGetAtmoR = () => {
+      const basePlanetR = Math.min(_pvCanvas.width, _pvCanvas.height) * 0.22;
+      return basePlanetR * _pvZoom * _pvAtmoScale();
+    };
+    // Returns true if (clientX, clientY) is within the atmosphere ring hit zone
+    const _pvIsNearEdge = (clientX, clientY) => {
+      const rect = _pvCanvas.getBoundingClientRect();
+      const cssScale = rect.width / _pvCanvas.width;
+      const localX = clientX - rect.left;
+      const localY = clientY - rect.top;
+      // Planet centre in CSS pixels (canvas centre + pan offset converted to CSS px)
+      const pcx = rect.width  / 2 + _pvPanX * cssScale;
+      const pcy = rect.height / 2 + _pvPanY * cssScale;
+      const dx = localX - pcx, dy = localY - pcy;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      const atmoR = _pvGetAtmoR() * cssScale; // atmoR in CSS px
+      return Math.abs(dist - atmoR) < 16;
+    };
+
+    _pvCanvas.addEventListener('mousemove', e => {
+      if(_mode !== 'preview') return;
+      if(!_pvEdgeDrag && !_pvDragging){
+        _pvCanvas.style.cursor = _pvIsNearEdge(e.clientX, e.clientY) ? 'ns-resize' : '';
+      }
+    });
+
     _pvCanvas.addEventListener('mousedown', e => {
       if(_mode !== 'preview') return;
-      _pvDragging = true; _pvDragX = e.clientX; _pvDragY = e.clientY;
-      _pvCanvas.style.cursor = 'grabbing';
+      if(_pvIsNearEdge(e.clientX, e.clientY)){
+        _pvEdgeDrag = true;
+        _pvEdgeDragStartY = e.clientY;
+        _pvEdgeStartGradH = _pvGradH_km;
+        _pvCanvas.style.cursor = 'ns-resize';
+      } else {
+        _pvDragging = true; _pvDragX = e.clientX; _pvDragY = e.clientY;
+        _pvCanvas.style.cursor = 'grabbing';
+      }
     });
+
     window.addEventListener('mousemove', e => {
+      if(_pvEdgeDrag){
+        // Dragging upward (negative dy) → increase gradient height
+        // Scale: 1px drag ≈ planetR_km * 0.015  km change (feels natural)
+        const dy = e.clientY - _pvEdgeDragStartY;
+        const kmPerPx = _pvPlanetR_km * 0.015;
+        _pvGradH_km = Math.max(10, Math.min(80000, _pvEdgeStartGradH - dy * kmPerPx));
+        _syncPvLabels();
+        _renderPreview();
+        return;
+      }
       if(!_pvDragging) return;
       _pvPanX += e.clientX - _pvDragX; _pvPanY += e.clientY - _pvDragY;
       _pvDragX = e.clientX; _pvDragY = e.clientY;
       _renderPreview();
     });
-    window.addEventListener('mouseup', () => { _pvDragging = false; _pvCanvas.style.cursor = ''; });
+    window.addEventListener('mouseup', () => {
+      _pvDragging = false; _pvEdgeDrag = false;
+      _pvCanvas.style.cursor = '';
+    });
 
     // Scroll to zoom
     _pvCanvas.addEventListener('wheel', e => {
@@ -1154,13 +1321,21 @@ const TC = (() => {
       _renderPreview();
     }, {passive:false});
 
-    // Touch: drag to pan, pinch to zoom
+    // Touch: drag to pan / edge-drag / pinch to zoom
+    let _pvTouchEdge = false;
     _pvCanvas.addEventListener('touchstart', e => {
       if(_mode !== 'preview') return;
       if(e.touches.length === 1){
-        _pvDragging = true; _pvDragX = e.touches[0].clientX; _pvDragY = e.touches[0].clientY;
+        const t = e.touches[0];
+        if(_pvIsNearEdge(t.clientX, t.clientY)){
+          _pvTouchEdge = true;
+          _pvEdgeDragStartY = t.clientY;
+          _pvEdgeStartGradH = _pvGradH_km;
+        } else {
+          _pvDragging = true; _pvDragX = t.clientX; _pvDragY = t.clientY;
+        }
       } else if(e.touches.length === 2){
-        _pvDragging = false;
+        _pvDragging = false; _pvTouchEdge = false;
         const dx = e.touches[0].clientX - e.touches[1].clientX;
         const dy = e.touches[0].clientY - e.touches[1].clientY;
         _pvPinchDist = Math.sqrt(dx*dx+dy*dy);
@@ -1169,10 +1344,19 @@ const TC = (() => {
     _pvCanvas.addEventListener('touchmove', e => {
       if(_mode !== 'preview') return;
       e.preventDefault();
-      if(e.touches.length === 1 && _pvDragging){
-        _pvPanX += e.touches[0].clientX - _pvDragX; _pvPanY += e.touches[0].clientY - _pvDragY;
-        _pvDragX = e.touches[0].clientX; _pvDragY = e.touches[0].clientY;
-        _renderPreview();
+      if(e.touches.length === 1){
+        const t = e.touches[0];
+        if(_pvTouchEdge){
+          const dy = t.clientY - _pvEdgeDragStartY;
+          const kmPerPx = _pvPlanetR_km * 0.015;
+          _pvGradH_km = Math.max(10, Math.min(80000, _pvEdgeStartGradH - dy * kmPerPx));
+          _syncPvLabels();
+          _renderPreview();
+        } else if(_pvDragging){
+          _pvPanX += t.clientX - _pvDragX; _pvPanY += t.clientY - _pvDragY;
+          _pvDragX = t.clientX; _pvDragY = t.clientY;
+          _renderPreview();
+        }
       } else if(e.touches.length === 2){
         const dx = e.touches[0].clientX - e.touches[1].clientX;
         const dy = e.touches[0].clientY - e.touches[1].clientY;
@@ -1185,7 +1369,9 @@ const TC = (() => {
         _pvPinchDist = dist;
       }
     }, {passive:false});
-    _pvCanvas.addEventListener('touchend', () => { _pvDragging = false; _pvPinchDist = 0; });
+    _pvCanvas.addEventListener('touchend', () => {
+      _pvDragging = false; _pvTouchEdge = false; _pvPinchDist = 0;
+    });
 
     _setMode('canvas');
     _renderGradientList();

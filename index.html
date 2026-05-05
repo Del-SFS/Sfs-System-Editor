@@ -159,9 +159,68 @@
       </small>
     </div>
     <button class="mf-btn ok" style="width:100%;margin-top:12px" onclick="goNewFromOpen()">START WITH EMPTY SYSTEM</button>
+    <button class="mf-btn" style="width:100%;margin-top:8px;border-color:var(--sky);color:var(--sky2);background:rgba(85,136,204,.08)" onclick="goFeatured()">
+      <span style="margin-right:6px">⭐</span>FEATURED SYSTEMS
+    </button>
   </div>
 </div>
 <input type="file" id="fi-zip" accept=".zip" style="display:none" onchange="loadZipFile(this.files[0]);this.value=''">
+
+<!-- ══════════════ FEATURED SYSTEMS SCREEN ══════════════ -->
+<div class="screen hide" id="s-featured">
+  <div class="topbar">
+    <button class="tb-back" onclick="show('s-open')">← BACK</button>
+    <span class="tb-title">FEATURED SYSTEMS</span>
+  </div>
+
+  <div class="fs-page">
+
+    <!-- Info banner -->
+    <div class="fs-info-bar">
+      <span class="fs-info-label">📋 CONDITIONS</span>
+      All assets are free to use — You must give credit to the original creator.
+      To get your system featured here, it must be high quality.
+      <a class="fs-info-link" href="https://discord.gg/" target="_blank">Contact me on Discord ›</a>
+    </div>
+
+    <!-- Grid -->
+    <div class="fs-grid" id="fs-grid">
+
+      <!-- ── SFS DEFAULT SYSTEM ── -->
+      <div class="fs-card">
+        <div class="fs-card-header">
+          <span class="fs-card-title">SFS DEFAULT SYSTEM</span>
+          <span class="fs-card-author">by SFS Dev Team / Team Curiosity</span>
+        </div>
+        <div class="fs-card-preview" id="fs-default-preview" style="padding:0;overflow:hidden;border-radius:6px">
+          <img src="featured/preview.png"
+               onerror="this.style.display='none';document.getElementById('fs-default-planets-fallback').style.display='flex'"
+               style="width:100%;height:100%;object-fit:cover;display:block" alt="SFS Default System Preview">
+          <div class="fs-planet-row" id="fs-default-planets-fallback" style="display:none">
+            <div class="fs-planet" style="width:52px;height:52px;background:radial-gradient(circle at 38% 38%,#e8c878,#c89830,#7a5010);border:2px solid #c8a040" title="Sun"></div>
+            <div class="fs-planet" style="width:28px;height:28px;background:radial-gradient(circle at 38% 38%,#d8c0a8,#a08868,#604830);border:2px solid #907050" title="Mercury"></div>
+            <div class="fs-planet" style="width:36px;height:36px;background:radial-gradient(circle at 38% 38%,#e8d898,#c8a840,#806820);border:2px solid #b09040" title="Venus"></div>
+            <div class="fs-planet" style="width:36px;height:36px;background:radial-gradient(circle at 38% 38%,#6890c8,#3060a0,#102040);border:2px solid #4070b0" title="Earth"></div>
+            <div class="fs-planet" style="width:30px;height:30px;background:radial-gradient(circle at 38% 38%,#c87858,#a05038,#602818);border:2px solid #904030" title="Mars"></div>
+          </div>
+        </div>
+        <div class="fs-card-desc">
+          The vanilla SFS solar system — Sun, Mercury, Venus, Earth &amp; Moon, Mars &amp; Phobos, and more.
+        </div>
+        <div class="fs-card-actions">
+          <button class="fs-btn fs-btn-dl" onclick="loadZipFromUrl('featured/Example.zip','SFS Default System.zip')">⬇ DOWNLOAD &amp; OPEN</button>
+        </div>
+      </div>
+
+      <!-- ── BLANK CARD slot 2 ── -->
+      <div class="fs-card fs-card-empty">
+        <div class="fs-empty-icon">＋</div>
+        <div class="fs-empty-label">YOUR SYSTEM HERE</div>
+        <div class="fs-empty-sub">Consented systems will be featured here.</div>
+      </div>
+    </div><!-- /fs-grid -->
+  </div>
+</div>
 
 <!-- ══════════════ PRESET MODAL ══════════════ -->
 
