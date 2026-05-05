@@ -14,7 +14,7 @@ If you're on mobile/weak device You might have to wait a bit more for loading.
 Skip if using online
 
 1) Download these 3 things-
-- Editor zip https://github.com/Tserieskinda/Sfs-System-Editor/releases/download/v5_0/SFS.Editor.zip
+- All editor files from github (html, css, js) and put them in a folder the same way as this repo's main.
 - Assets Zip https://github.com/Tserieskinda/Sfs-System-Editor/releases/download/v5_0/SFS.Textures.+.Presets.zip
 - (For android) Install Simple HTTP from playstore
 - (For PC) Install Python
@@ -23,6 +23,7 @@ Skip if using online
 2) Extract the Editor zip
 
 3) for Android-
+- Either use Speck editor OR
 - Open simple HTTPS and select the root folder to the one you just extracted, Example- Download/SFS Editor (where you can see the .js and .css files)
 - Click on start server and copy the web adress shown in the app
 - Paste the adress in a browser, the program will load and now you can insert the presets/textures zip by the button
