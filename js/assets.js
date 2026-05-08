@@ -182,21 +182,39 @@ function renderAssetRow(entry, type){
 
 function removeAsset(safeName, type){
   if(type && type !== 'textures'){
+    // Find the real name before removing, so we can bust caches keyed by it
+    const removed = assets[type]?.find(a => sanitize(a.name) === safeName);
     if(assets[type]) assets[type] = assets[type].filter(a=>sanitize(a.name)!==safeName);
     document.getElementById('asset-'+type+'-'+safeName)?.remove();
-    // Update heightmaps empty state
     if(type === 'heightmaps'){
+      // Bust heightmap cache entries for removed name
+      if(removed && typeof _hmCache !== 'undefined'){
+        delete _hmCache[removed.name];
+        const base = removed.name.replace(/\.[^.]+$/, '');
+        if(base !== removed.name) delete _hmCache[base];
+      }
+      if(typeof invalidateTerrainCache === 'function') invalidateTerrainCache('*');
+      if(typeof hmRefreshLoadedList === 'function') hmRefreshLoadedList();
+      // Update empty state
       const list = document.getElementById('alist-heightmaps');
       const empty = document.getElementById('asset-hm-empty');
       if(empty && list) empty.style.display = list.querySelectorAll('.asset-row').length === 0 ? 'block' : 'none';
     }
+    if(typeof drawViewport === 'function') drawViewport();
     return;
   }
   // Remove from textures list
+  const removedTex = assets.textures.find(a => sanitize(a.name) === safeName);
   assets.textures = assets.textures.filter(a=>sanitize(a.name)!==safeName);
   document.getElementById('asset-tex-'+safeName)?.remove();
+  // Bust texture cache for removed entry
+  if(removedTex && typeof textureCache !== 'undefined'){
+    const texBase = removedTex.name.replace(/\.[^.]+$/, '');
+    delete textureCache[texBase];
+  }
   refreshTexPickerLists();
   updateAssetEmptyState();
+  if(typeof drawViewport === 'function') drawViewport();
 }
 
 function updateAssetEmptyState(){
@@ -391,15 +409,24 @@ function refreshTexPickerLists(){
 
 // Wire up all tpick widgets
 function initTexPickers(){
+  // Detect touch once — coarse pointer = mobile/tablet
+  const isTouch = window.matchMedia('(pointer: coarse)').matches;
+
   TPICK_IDS.forEach(pickId => {
     const inp = document.getElementById(pickId);
     const clr = document.getElementById('tpc-'+pickId);
     let   dd  = document.getElementById('tpd-'+pickId);
     if(!inp || !dd) return;
 
-    // Move the dropdown to <body> so it escapes the sidebar's transform stacking context.
-    // (sidebar uses transform:translateX which makes position:fixed relative to sidebar, not viewport)
-    document.body.appendChild(dd);
+    // On desktop: move dropdown to <body> so it escapes the sidebar's
+    // transform stacking context (transform:translateX makes position:fixed
+    // relative to the sidebar, not the viewport).
+    // On touch: keep dropdown inside .tpick-wrap so that the CSS
+    // `position:absolute; bottom:calc(100% + 2px)` correctly places it
+    // above the input (above the software keyboard).
+    if(!isTouch){
+      document.body.appendChild(dd);
+    }
 
     // mousedown on input: open picker, stop propagation so _tpickOutside doesn't
     // immediately close it on the same event.
@@ -408,17 +435,18 @@ function initTexPickers(){
       if(!dd.classList.contains('open')) openTexPicker(pickId);
       // If already open, leave it — user may be clicking to reposition cursor for typing
     });
-    // Mobile
+    // Mobile: touchend opens picker
     inp.addEventListener('touchend', e => {
       e.stopPropagation();
       openTexPicker(pickId);
     }, { passive: false });
 
-    // Type to filter — always use current inp.value as the live query
+    // Type to filter — debounced so mobile doesn't choke rebuilding DOM every keystroke.
+    // Desktop gets a shorter delay (50 ms) for snappier feel; touch gets 150 ms.
+    let _tpickTimer = null;
     inp.addEventListener('input', () => {
-      // Reposition on desktop
-      const isTouch = window.matchMedia('(pointer: coarse)').matches;
       if(!isTouch){
+        // Reposition dropdown on desktop
         const rect = inp.getBoundingClientRect();
         dd.style.left  = rect.left + 'px';
         dd.style.width = rect.width + 'px';
@@ -432,7 +460,11 @@ function initTexPickers(){
         }
       }
       dd.classList.add('open');
-      buildDropdownItems(pickId, inp.value);
+      // Debounce the expensive DOM rebuild
+      clearTimeout(_tpickTimer);
+      _tpickTimer = setTimeout(() => {
+        buildDropdownItems(pickId, inp.value);
+      }, isTouch ? 150 : 50);
     });
     // Clear button
     if(clr) clr.addEventListener('click', e => {
@@ -454,12 +486,14 @@ function initTexPickers(){
   }
   document.addEventListener('mousedown',  _tpickOutside);
   document.addEventListener('touchstart', _tpickOutside, { passive: true });
-  // Stop mousedown on any dropdown from bubbling to _tpickOutside
+  // Stop mousedown/touchstart on any dropdown from bubbling to _tpickOutside.
+  // Query dropdowns AFTER conditional body.appendChild above so we catch the
+  // right parent for each device type.
   document.querySelectorAll('.tpick-dropdown').forEach(dd => {
     dd.addEventListener('mousedown', e => e.stopPropagation());
     dd.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
   });
-  // Close on sb-body scroll (the actual scrolling element — fixed dropdown drifts)
+  // Close on sb-body scroll (desktop fixed dropdown drifts on scroll)
   const sbBody = document.querySelector('.sb-body');
   if(sbBody) sbBody.addEventListener('scroll', () => {
     TPICK_IDS.forEach(id => closeTexPicker(id));

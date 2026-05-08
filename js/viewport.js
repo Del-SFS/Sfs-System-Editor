@@ -56,12 +56,18 @@ function getSMAScale(){
 function smaToPixels(sma){ return sma * getSMAScale(); }
 
 // Returns SMA scaled by smaDifficultyScale for the current viewDifficulty.
+// Global default always applies (Normal=1/20, Hard=1/10, Realistic=1).
+// Per-body smaDifficultyScale is an additional multiplier on top.
 function effectiveSMA(od){
   if(!od) return 0;
+  const globalMult = _DEF_SMA_SCALE[viewDiffKey] ?? 1;
   const scale = od.smaDifficultyScale;
-  const mult = (scale && scale[viewDiffKey] != null) ? scale[viewDiffKey] : 1;
-  return od.semiMajorAxis * mult;
+  const perBody = (scale && scale[viewDiffKey] != null) ? scale[viewDiffKey] : 1;
+  return od.semiMajorAxis * globalMult * perBody;
 }
+
+// Default SMA difficulty multipliers (game default: Normal=1/20, Hard=1/10, Realistic=1)
+const _DEF_SMA_SCALE = { Normal: 1/20, Hard: 1/10, Realistic: 1 };
 
 // Mirrors Difficulty.RadiusScale() — defaultPlanetScales: Normal=1, Hard=2, Realistic=20
 const _DEF_RADIUS_SCALE = { normal: 1.0, hard: 2.0, realistic: 20.0 };
@@ -96,6 +102,10 @@ function cycleDifficulty(){
   // Invalidate all cached gradient stops — they depend on difficulty (atmo, ring fades)
   if(drawViewport._atmoStopCache) drawViewport._atmoStopCache = {};
   if(drawViewport._ringStopCache) drawViewport._ringStopCache = {};
+  // Refresh orbital period — effective SMA and parent GM both change with difficulty
+  if(typeof updatePeriodFromSMA === 'function') updatePeriodFromSMA();
+  // Refresh SOI display — depends on effectiveSMA and soiDifficultyScale
+  if(typeof updateSOIDisplay === 'function') updateSOIDisplay();
   drawViewport();
 }
 
@@ -144,6 +154,9 @@ let bodyVisible = {};
 // Store computed screen positions and visibility for hit-testing
 let bodyScreenPos = {};
 let bodyVisibleMap = {};
+// Max terrain radius in pixels for each body (updated each draw frame).
+// Keyed by body name. 0 means no terrain / not yet computed.
+let bodyTerrainPeakPx = {};
 let showFrontClouds = true; // legacy alias — kept for draw code gate
 let dbgFogOpacity = 1.0;   // kept for any legacy references (unused by new system)
 
@@ -568,6 +581,7 @@ function _drawViewportNow(){
 
   bodyScreenPos = {};
   names.forEach(name => {
+    try {
     const b = bodies[name];
     const wp = bodyWorldPos[name] || {x:0, y:0};
     const sp = worldToScreen(wp.x, wp.y);
@@ -2136,6 +2150,7 @@ function _drawViewportNow(){
         ctx2.lineCap = 'butt';
       }
     }
+    } catch(e) { console.error('[SFS|DRAW] Error drawing body "'+name+'": '+e.message, e); }
   });
 
   bodyScreenPos = {};
@@ -2422,6 +2437,7 @@ function _getHeightMap(hmName) {
   if (entry.url) {
     _hmCache[hmName] = _parseHmPng(entry.url).then(pts => {
       _hmCache[hmName] = pts;
+      if (typeof invalidateTerrainCache === 'function') invalidateTerrainCache('*');
       if (typeof drawViewport === 'function') drawViewport();
     });
     return null;
@@ -3061,6 +3077,16 @@ function drawTerrainBody(ctx, b, bodyName, sp, physR_px, radius_m, mapColor, N, 
 
   const result = _getTerrainSamples(bodyName, b, radius_m, N, arcInfo);
   if (!result) return false;
+
+  // Track the max terrain radius in screen pixels for hit-testing.
+  // Peak formula mirrors _buildTerrainPath: physR_px * (1 + h / radius_m).
+  {
+    let _peakH = 0;
+    for (let _i = 0; _i < result.heights.length; _i++) {
+      if (result.heights[_i] > _peakH) _peakH = result.heights[_i];
+    }
+    bodyTerrainPeakPx[bodyName] = physR_px * (1 + _peakH / radius_m);
+  }
 
   // ── Edge-disk fill ───────────────────────────────────────────────────────
   // Sample the outermost few rows of the planet texture once and cache the
