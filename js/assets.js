@@ -293,8 +293,11 @@ function buildDropdownItems(pickId, query){
   const filtered = names.filter(n => !q || n.toLowerCase().includes(q));
   const dd = document.getElementById('tpd-'+pickId);
   if(!dd) return;
+  // Bump token so any in-flight rAF chains from a previous build abort.
+  dd._buildToken = (dd._buildToken || 0) + 1;
   dd.innerHTML = '';
-  // Always show None at top
+
+  // Always show None at top (counts toward the cap)
   if(!q || 'none'.includes(q)){
     const noneEl = document.createElement('div');
     noneEl.className = 'tpick-opt tpick-none';
@@ -305,20 +308,31 @@ function buildDropdownItems(pickId, query){
   if(filtered.length === 0 && q){
     const emp = document.createElement('div');
     emp.className = 'tpick-empty';
-    emp.textContent = 'No textures match "' + query + '"';
+    emp.textContent = 'No match for "' + query + '"';
     dd.appendChild(emp);
     return;
   }
-  filtered.forEach(name => {
+
+  // Show at most 5 results — keeps DOM tiny and images small on mobile.
+  const MAX_VISIBLE = 5;
+  const visible = filtered.slice(0, MAX_VISIBLE);
+  visible.forEach(name => {
     const el = document.createElement('div');
     el.className = 'tpick-opt';
     const thumb = getTexThumb(name);
     el.innerHTML = thumb
       ? `<img class="tpick-opt-thumb" src="${thumb}"><span class="tpick-opt-name">${name}</span>`
-      : `<span style="width:24px;height:24px;flex-shrink:0;background:var(--ac10);border:1px solid var(--rim)"></span><span class="tpick-opt-name">${name}</span>`;
+      : `<span class="tpick-opt-nothumb"></span><span class="tpick-opt-name">${name}</span>`;
     el.onclick = () => commitTexPick(pickId, name);
     dd.appendChild(el);
   });
+
+  if(filtered.length > MAX_VISIBLE){
+    const more = document.createElement('div');
+    more.className = 'tpick-empty';
+    more.textContent = `+${filtered.length - MAX_VISIBLE} more — type to filter`;
+    dd.appendChild(more);
+  }
 }
 
 function commitTexPick(pickId, name){
@@ -364,7 +378,7 @@ function openTexPicker(pickId){
 
 function closeTexPicker(pickId){
   const dd = document.getElementById('tpd-'+pickId);
-  if(dd) dd.classList.remove('open');
+  if(dd){ dd.classList.remove('open'); dd._buildToken = (dd._buildToken || 0) + 1; }
   // Restore display text if user typed but didn't pick a result
   const inp = document.getElementById(pickId);
   if(inp && inp.dataset.lastCommit !== undefined){

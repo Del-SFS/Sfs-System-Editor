@@ -1161,9 +1161,12 @@ function _liveSyncNow(){
   }
 
   // Only invalidate terrain cache when a terrain-relevant field triggered the sync.
-  // Invalidating on every keystroke (e.g. body name, map color) forces expensive
-  // heightmap re-evaluation each frame on weak devices.
-  if(typeof invalidateTerrainCache === 'function') invalidateTerrainCache(selectedBody);
+  // Orbit fields (SMA, eccentricity, AoP, direction) never affect terrain geometry —
+  // skipping the invalidation prevents a full terrain re-sample every slider tick on mobile.
+  const _orbitOnlyIds = new Set(['or-ecc','or-ecc-sl','or-aop','or-aop-sl','or-sma','or-sma-unit','or-dir','or-period','or-period-unit']);
+  if(typeof invalidateTerrainCache === 'function' && !_orbitOnlyIds.has(_focusId)){
+    invalidateTerrainCache(selectedBody);
+  }
 
   // BASE DATA
   d.BASE_DATA = d.BASE_DATA || {};
