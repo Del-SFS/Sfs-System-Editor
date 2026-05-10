@@ -55,19 +55,19 @@ function getSMAScale(){
 // Convert SMA (metres) → pixels given current scale
 function smaToPixels(sma){ return sma * getSMAScale(); }
 
-// Returns SMA scaled by smaDifficultyScale for the current viewDifficulty.
-// Global default always applies (Normal=1/20, Hard=1/10, Realistic=1).
-// Per-body smaDifficultyScale is an additional multiplier on top.
+// Returns SMA scaled for the current viewDifficulty, matching game's SmaScale(planet).
+// Files store the Normal-mode SMA. Default multipliers: Normal=1, Hard=2, Realistic=20.
+// Per-body smaDifficultyScale overrides the default entirely (same as game behaviour).
 function effectiveSMA(od){
   if(!od) return 0;
-  const globalMult = _DEF_SMA_SCALE[viewDiffKey] ?? 1;
   const scale = od.smaDifficultyScale;
-  const perBody = (scale && scale[viewDiffKey] != null) ? scale[viewDiffKey] : 1;
-  return od.semiMajorAxis * globalMult * perBody;
+  const mult = (scale && scale[viewDiffKey] != null) ? scale[viewDiffKey] : (_DEF_SMA_SCALE[viewDiffKey] ?? 1);
+  return od.semiMajorAxis * mult;
 }
 
-// Default SMA difficulty multipliers (game default: Normal=1/20, Hard=1/10, Realistic=1)
-const _DEF_SMA_SCALE = { Normal: 1/20, Hard: 1/10, Realistic: 1 };
+// Default SMA difficulty multipliers — matches game's defaultDistanceScales: Normal=1, Hard=2, Realistic=20.
+// Planet files store the Normal-mode SMA. The game multiplies it by this scale for harder difficulties.
+const _DEF_SMA_SCALE = { Normal: 1, Hard: 2, Realistic: 20 };
 
 // Mirrors Difficulty.RadiusScale() — defaultPlanetScales: Normal=1, Hard=2, Realistic=20
 const _DEF_RADIUS_SCALE = { normal: 1.0, hard: 2.0, realistic: 20.0 };
@@ -106,6 +106,9 @@ function cycleDifficulty(){
   if(typeof updatePeriodFromSMA === 'function') updatePeriodFromSMA();
   // Refresh SOI display — depends on effectiveSMA and soiDifficultyScale
   if(typeof updateSOIDisplay === 'function') updateSOIDisplay();
+  // Re-populate sidebar so SMA and radius fields reflect the new difficulty multiplier
+  if(typeof fillSidebar === 'function' && typeof selectedBody !== 'undefined' && selectedBody)
+    fillSidebar(selectedBody);
   drawViewport();
 }
 
@@ -220,8 +223,8 @@ function toggleSOI(){ toggleEnvFlag('soi'); }
 
 // ── SOI calculation (mirrors SFS game logic) ──
 // Formula: SOI = effectiveSMA × (mass_body / mass_parent)^0.4 × multiplierSOI
-// effectiveSMA = rawSMA × smaDifficultyScale[difficulty]  (Title Case keys, now fixed)
-// If no per-body smaDifficultyScale, effectiveSMA = rawSMA (scale=1 on Normal).
+// effectiveSMA = rawSMA × smaDifficultyScale[difficulty], default Normal=1, Hard=2, Realistic=20.
+// Files store the Normal-mode SMA; the game scales up for harder difficulties.
 // multiplierSOI is the raw value from ORBIT_DATA — no additional scaling.
 function computeSOI_m(name){
   const b = bodies[name];

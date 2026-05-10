@@ -26,6 +26,10 @@ function updateBodyIcon(r, g, b, a){
 }
 
 function selectBody(name){
+  // Blur any focused input before switching bodies to prevent data transfer
+  if (document.activeElement && document.activeElement.blur) {
+    document.activeElement.blur();
+  }
   selectedBody = name;
   if (typeof NameGen !== 'undefined') NameGen.clearSession(name);
   document.getElementById('sb-sel').textContent = name;
@@ -104,7 +108,7 @@ function replaceBodyPrompt(){
     if(!preset) return;
     pushUndo();
     const old = bodies[selectedBody];
-    const newData = JSON.parse(JSON.stringify(preset.data));
+    const newData = normalizeDiffScaleKeys(JSON.parse(JSON.stringify(preset.data)));
     if(old.data.ORBIT_DATA) newData.ORBIT_DATA = JSON.parse(JSON.stringify(old.data.ORBIT_DATA));
     else delete newData.ORBIT_DATA;
     bodies[selectedBody] = { data:newData, preset:preset.id, isCenter:old.isCenter, color:preset.color, glow:preset.glow, icon:preset.icon };
@@ -689,12 +693,18 @@ function fillSidebar(name){
 
   // BASE
   const BD = d.BASE_DATA||{};
-  setDistInput('b-radius','b-radius-unit','b-radius-hint', BD.radius ?? 0, 'radius');
+  { const _rm = (typeof getRadiusDifficultyMult === 'function') ? getRadiusDifficultyMult(BD) : 1;
+    setDistInput('b-radius','b-radius-unit','b-radius-hint', (BD.radius ?? 0) * _rm, 'radius'); }
   const rds = BD.radiusDifficultyScale||{};
-  setVal('b-radius-n', rds.Normal); setVal('b-radius-h', rds.Hard); setVal('b-radius-r', rds.Realistic);
+  // Empty string when not set — prevents baking defaults into the file on every liveSync.
+  setVal('b-radius-n', rds.Normal    ?? '');
+  setVal('b-radius-h', rds.Hard      ?? '');
+  setVal('b-radius-r', rds.Realistic ?? '');
   setGravDisplay(BD.gravity);
   const gds = BD.gravityDifficultyScale||{};
-  setVal('b-grav-n', gds.Normal); setVal('b-grav-h', gds.Hard); setVal('b-grav-r', gds.Realistic);
+  setVal('b-grav-n', gds.Normal    ?? '');
+  setVal('b-grav-h', gds.Hard      ?? '');
+  setVal('b-grav-r', gds.Realistic ?? '');
   setVal('b-twh', BD.timewarpHeight);
   setVal('b-vah', BD.velocityArrowsHeight);
   const mc = BD.mapColor||{r:1,g:1,b:1,a:1};
@@ -879,14 +889,32 @@ function fillSidebar(name){
 
   const OR = d.ORBIT_DATA||{};
   setVal('or-par',OR.parent);
-  setDistInput('or-sma','or-sma-unit','or-sma-hint', OR.semiMajorAxis ?? 0, 'sma');
-  const sds=OR.smaDifficultyScale||{}; setVal('or-sn',sds.Normal); setVal('or-sh',sds.Hard); setVal('or-sr',sds.Realistic);
+  { // Use effective scale: per-body override if present, else global default.
+    // Mirrors the game's SmaScale() — per-body replaces global entirely.
+    const _sds = OR.smaDifficultyScale || {};
+    const _vdk = (typeof viewDiffKey !== 'undefined') ? viewDiffKey : 'Normal';
+    const _defS = (typeof _DEF_SMA_SCALE !== 'undefined') ? _DEF_SMA_SCALE : {Normal:1,Hard:2,Realistic:20};
+    const _gm = (_sds[_vdk] != null) ? _sds[_vdk] : (_defS[_vdk] ?? 1);
+    setDistInput('or-sma','or-sma-unit','or-sma-hint', (OR.semiMajorAxis ?? 0) * _gm, 'sma'); }
+  const _rawSds=OR.smaDifficultyScale||{};
+  const sds={ Normal: _rawSds.Normal ?? _rawSds.normal, Hard: _rawSds.Hard ?? _rawSds.hard, Realistic: _rawSds.Realistic ?? _rawSds.realistic };
+  // Use empty string (not 1) when no per-body scale is set.
+  // This way liveSync's buildDiffScale() sees NaN for empty fields and skips them,
+  // preserving an empty smaDifficultyScale instead of baking in {1,1,1} which would
+  // override the game's global defaults (1,2,20) every time any field is touched.
+  setVal('or-sn', sds.Normal    ?? '');
+  setVal('or-sh', sds.Hard      ?? '');
+  setVal('or-sr', sds.Realistic ?? '');
   setSlider('or-ecc', OR.eccentricity, 0, 0.999); setSlider('or-aop', OR.argumentOfPeriapsis, -360, 360);
   initSlider('or-ecc',0,0.999);
   initSlider('or-aop',-360,360);
   setSelectVal('or-dir', String(OR.direction ?? 1));  // ?? not || so 0 is preserved
   setVal('or-soi',OR.multiplierSOI);
-  const ssds=OR.soiDifficultyScale||{}; setVal('or-soin',ssds.Normal); setVal('or-soih',ssds.Hard); setVal('or-soir',ssds.Realistic);
+  const ssds=OR.soiDifficultyScale||{};
+  // Same empty-string treatment as smaDifficultyScale above.
+  setVal('or-soin', ssds.Normal    ?? '');
+  setVal('or-soih', ssds.Hard      ?? '');
+  setVal('or-soir', ssds.Realistic ?? '');
   updateSOIDisplay();
   if (typeof updatePeriodFromSMA === 'function') setTimeout(updatePeriodFromSMA, 0);
   toggleOrbit();
@@ -1139,7 +1167,8 @@ function _liveSyncNow(){
 
   // BASE DATA
   d.BASE_DATA = d.BASE_DATA || {};
-  d.BASE_DATA.radius              = getDistMetres('b-radius') || d.BASE_DATA.radius;
+  { const _rm = (typeof getRadiusDifficultyMult === 'function') ? getRadiusDifficultyMult(d.BASE_DATA) : 1;
+    const _rv = getDistMetres('b-radius'); if(_rv) d.BASE_DATA.radius = _rm > 0 ? _rv / _rm : _rv; }
   d.BASE_DATA.radiusDifficultyScale = buildDiffScale('b-radius-n','b-radius-h','b-radius-r');
   d.BASE_DATA.gravity             = getGravMs2() || d.BASE_DATA.gravity;
   d.BASE_DATA.gravityDifficultyScale = buildDiffScale('b-grav-n','b-grav-h','b-grav-r');
@@ -1305,7 +1334,16 @@ function _liveSyncNow(){
     const dirRaw = document.getElementById('or-dir').value;
     d.ORBIT_DATA = {
       parent:             val('or-par') || 'Sun',
-      semiMajorAxis:      getDistMetres('or-sma'),
+      semiMajorAxis:      (() => {
+        // Recover stored SMA by dividing out the same effective scale used in fillSidebar.
+        // Per-body smaDifficultyScale replaces global default entirely (mirrors game SmaScale()).
+        const _sds  = buildDiffScale('or-sn','or-sh','or-sr');
+        const _vdk  = (typeof viewDiffKey !== 'undefined') ? viewDiffKey : 'Normal';
+        const _defS = (typeof _DEF_SMA_SCALE !== 'undefined') ? _DEF_SMA_SCALE : {Normal:1,Hard:2,Realistic:20};
+        const gm    = (_sds[_vdk] != null) ? _sds[_vdk] : (_defS[_vdk] ?? 1);
+        const raw   = getDistMetres('or-sma');
+        return gm > 0 ? raw / gm : raw;
+      })(),
       smaDifficultyScale: buildDiffScale('or-sn','or-sh','or-sr'),
       eccentricity:       Math.min(_sf('or-ecc', 0), 0.999),
       argumentOfPeriapsis:_sf('or-aop', 0),
@@ -1358,6 +1396,8 @@ document.getElementById('sidebar').addEventListener('input',  e => {
     if(!liveSync._filling) liveSync();
     return;
   }
+  // Defer liveSync on text inputs to blur event — prevents lag while typing
+  if(e.target.type === 'text') return;
   if(!liveSync._filling) liveSync();
 });
 document.getElementById('sidebar').addEventListener('change', e => {
@@ -1366,6 +1406,12 @@ document.getElementById('sidebar').addEventListener('change', e => {
   if(e.target.id === 'or-period-unit') return;  // handled by attachPeriodParser
   if(!liveSync._filling) liveSync();
 });
+// Catch blur on text inputs to trigger liveSync after typing is done
+document.getElementById('sidebar').addEventListener('blur', e => {
+  if(e.target.type === 'text' && e.target.id !== 'bsearch-input' && e.target.id !== 'hm-raw-view'){
+    if(!liveSync._filling) liveSync();
+  }
+}, true);  // use capture to catch blur events
 // Delegated click on all toggles — fires after their own onclick toggles the class
 document.getElementById('sidebar').addEventListener('click', e => {
   if(e.target.classList.contains('tog')) setTimeout(liveSync, 0);

@@ -2652,12 +2652,22 @@ function astApplyToBody() {
   if (!bodyName || !bodies[bodyName]) { alert('Select a target body first.'); return; }
 
   const rawName = (document.getElementById('ast-png-name').value || 'asteroid_heightmap').trim().replace(/\.png$/i,'');
-  const pngName = rawName + '.png';
+  
+  // Auto-increment serial number to ensure unique filenames
+  let uniqueName = rawName;
+  let serial = 1;
+  const existing = (typeof assets !== 'undefined' && assets.heightmaps) ? assets.heightmaps : [];
+  while (existing.some(e => e.name === uniqueName + '.png')) {
+    uniqueName = rawName + '_' + serial;
+    serial++;
+  }
+  
+  const pngName = uniqueName + '.png';
   const height = parseFloat(document.getElementById('ast-hmap-height-val').value) || 5000;
   const circ = astGetCircumference(bodyName);
   if (circ === null) { alert('Could not read body radius.'); return; }
 
-  const formulaLine = `OUTPUT = AddHeightMap(${rawName}.png, ${circ}, ${height})`;
+  const formulaLine = `OUTPUT = AddHeightMap(${uniqueName}.png, ${circ}, ${height})`;
 
   // 1. Save PNG into assets.heightmaps
   const mc = astBuildOffscreenCanvas();
@@ -2669,11 +2679,8 @@ function astApplyToBody() {
     // Store bytes for export
     blob.arrayBuffer().then(ab => { entry.bytes = new Uint8Array(ab); }).catch(()=>{});
 
-    // Remove any existing entry with same name
-    const existing = (typeof assets !== 'undefined') ? assets.heightmaps : null;
+    // Add to heightmaps array (no longer removing existing - now using unique names)
     if (existing) {
-      const idx = existing.findIndex(e => e.name === pngName);
-      if (idx !== -1) existing.splice(idx, 1);
       existing.push(entry);
     }
 
@@ -2691,7 +2698,7 @@ function astApplyToBody() {
     const appendLine = (key) => {
       const cur = (tfd[key] || []);
       // Remove any previous AddHeightMap for this png so we don't duplicate
-      const filtered = cur.filter(l => !l.includes(`AddHeightMap(${rawName}.png`));
+      const filtered = cur.filter(l => !l.includes(`AddHeightMap(${uniqueName}.png`));
       filtered.push(formulaLine);
       tfd[key] = filtered;
     };
