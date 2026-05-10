@@ -287,9 +287,42 @@
 </div>
 
 <div id="modal-preset">
-  <div class="mpanel" id="mpanel-preset" style="padding:28px 28px 22px;max-width:760px;width:90vw">
-    <h2 style="font-family:'Orbitron',sans-serif;font-size:.85rem;color:var(--sky2);letter-spacing:.15em;margin-bottom:6px">SELECT BODY PRESET</h2>
-    <p id="mp-desc" style="font-size:.7rem;color:var(--ink4);margin-bottom:16px">Choose a starting template — all properties are fully editable afterward</p>
+  <div class="mpanel" id="mpanel-preset" style="padding:22px 28px 20px;max-width:780px;width:92vw">
+    <!-- Header row: title + orbit controls -->
+    <div style="display:flex;align-items:flex-start;gap:16px;margin-bottom:10px">
+      <div style="flex:1;min-width:0">
+        <h2 style="font-family:'Orbitron',sans-serif;font-size:.82rem;color:var(--sky2);letter-spacing:.15em;margin-bottom:4px">SELECT BODY PRESET</h2>
+        <p id="mp-desc" style="font-size:.66rem;color:var(--ink4);margin:0">Choose a starting template — all properties are fully editable afterward</p>
+      </div>
+      <!-- Right-side controls: only shown for non-center bodies -->
+      <div id="prs-orbit-controls" style="display:none;flex-shrink:0;min-width:200px">
+        <!-- Orbit Height (SMA) -->
+        <div style="display:flex;align-items:center;gap:5px;margin-bottom:3px">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:.58rem;color:var(--ink4);white-space:nowrap;letter-spacing:.06em">orbit height</span>
+          <input id="prs-sma-input" type="text" inputmode="decimal" autocomplete="off" autocorrect="off" spellcheck="false"
+            style="flex:1;min-width:0;background:rgba(255,255,255,.04);border:1px solid var(--rim2);border-radius:3px;color:var(--ink2);font-family:'JetBrains Mono',monospace;font-size:.65rem;padding:4px 6px;outline:none"
+            oninput="prsOnSmaInput()" onblur="prsOnSmaBlur()">
+          <select id="prs-sma-unit" style="background:#0a0e1e;border:1px solid var(--rim2);border-radius:3px;color:var(--ink3);font-family:'JetBrains Mono',monospace;font-size:.6rem;padding:3px 2px;cursor:pointer;outline:none"
+            onchange="prsOnSmaUnitChange()">
+            <option value="m">m</option>
+            <option value="km">km</option>
+            <option value="Mm">Mm</option>
+            <option value="Gm">Gm</option>
+            <option value="AU" selected>AU</option>
+            <option value="ly">ly</option>
+          </select>
+        </div>
+        <!-- SOI display -->
+        <div id="prs-soi-display" style="font-family:'JetBrains Mono',monospace;font-size:.55rem;color:var(--ink4);padding-left:2px;margin-bottom:5px;min-height:14px"></div>
+        <!-- Parent body -->
+        <div style="display:flex;align-items:center;gap:5px">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:.58rem;color:var(--ink4);white-space:nowrap;letter-spacing:.06em">parent</span>
+          <select id="prs-parent-sel" style="flex:1;min-width:0;background:#0a0e1e;border:1px solid var(--rim2);border-radius:3px;color:var(--ink3);font-family:'JetBrains Mono',monospace;font-size:.6rem;padding:3px 5px;cursor:pointer;outline:none"
+            onchange="prsOnParentChange()"></select>
+          <button onclick="prsOnParentChange(true)" title="Clear parent — use currently selected body" style="background:transparent;border:1px solid var(--rim);border-radius:3px;color:var(--ink4);font-size:.6rem;padding:2px 5px;cursor:pointer;line-height:1">×</button>
+        </div>
+      </div>
+    </div>
     <!-- Tab bar -->
     <div class="prs-tabs">
       <button class="prs-tab on" onclick="prsSetTab('all',this)">ALL</button>
@@ -304,12 +337,13 @@
     </div>
     <!-- Grid -->
     <div class="prs-grid" id="prs-grid"></div>
-    <div class="modal-footer" style="margin-top:16px">
+    <div class="modal-footer" style="margin-top:14px">
       <button class="mf-btn" onclick="closePreset()">CANCEL</button>
       <label class="mf-btn" style="cursor:pointer;border-color:rgba(48,224,144,.45);color:rgba(48,224,144,.9);background:rgba(48,224,144,.07)" title="Import a body directly from a .txt file">
         ⬆ UPLOAD TXT
         <input type="file" accept=".txt" style="display:none" onchange="importBodyFromTxt(this)">
       </label>
+      <button class="mf-btn" id="prs-next-btn" onclick="prsNext()" style="display:none;border-color:rgba(100,180,255,.4);color:rgba(120,190,255,.9);background:rgba(100,180,255,.06)">NEXT →</button>
       <button class="mf-btn ok" id="prs-confirm-btn" onclick="confirmPreset()">ADD BODY →</button>
     </div>
   </div>
@@ -473,7 +507,7 @@
           <div class="frow"><span class="flabel">Height (m)</span>
             <input class="finput" style="flex:1;min-width:60px" id="av-height" type="text" inputmode="decimal" step="10000"><select class="funit-sel" id="av-height-unit" style="width:52px" onchange="onSimpleKmChange('av-height')"><option value="m">m</option><option value="km" selected>km</option></select></div>
           <div class="frow"><span class="flabel">Texture</span>
-            <div class="tpick-wrap" id="tpw-av-tex"><input class="tpick-input" id="av-tex" placeholder="Search texture…" autocomplete="off"><button class="tpick-clear" id="tpc-av-tex">✕</button><div class="tpick-dropdown" id="tpd-av-tex"></div></div>
+            <div class="tpick-wrap" id="tpw-av-tex"><div class="tpick-field"><div class="tpick-preview" id="tpv-av-tex"><div class="tpick-preview-none">none</div></div><input class="tpick-input" id="av-tex" placeholder="Search texture…" autocomplete="off"><button class="tpick-clear" id="tpc-av-tex">✕</button></div><div class="tpick-dropdown" id="tpd-av-tex"></div></div>
           </div>
         </div>
       </div>
@@ -483,7 +517,7 @@
           <div class="tog on" id="cl-has" onclick="this.classList.toggle('on');toggleAtmoSection('cl-fields','cl-has')"></div></div>
         <div id="cl-fields">
           <div class="frow"><span class="flabel">Texture</span>
-            <div class="tpick-wrap" id="tpw-cl-tex"><input class="tpick-input" id="cl-tex" placeholder="Search texture…" autocomplete="off"><button class="tpick-clear" id="tpc-cl-tex">✕</button><div class="tpick-dropdown" id="tpd-cl-tex"></div></div></div>
+            <div class="tpick-wrap" id="tpw-cl-tex"><div class="tpick-field"><div class="tpick-preview" id="tpv-cl-tex"><div class="tpick-preview-none">none</div></div><input class="tpick-input" id="cl-tex" placeholder="Search texture…" autocomplete="off"><button class="tpick-clear" id="tpc-cl-tex">✕</button></div><div class="tpick-dropdown" id="tpd-cl-tex"></div></div></div>
           <div class="frow"><span class="flabel">Start Height</span>
             <input class="finput" style="flex:1;min-width:60px" id="cl-sh" type="text" inputmode="decimal" step="100" oninput="clWidthAutoSync();syncCloudVel()"><select class="funit-sel" id="cl-sh-unit" style="width:52px" onchange="onSimpleKmChange('cl-sh')"><option value="m">m</option><option value="km" selected>km</option></select></div>
           <div class="frow"><span class="flabel">Width</span>
@@ -525,7 +559,7 @@
           <div class="tog" id="fc-has" onclick="this.classList.toggle('on');toggleAtmoSection('fc-fields','fc-has')"></div></div>
         <div id="fc-fields">
           <div class="frow"><span class="flabel">Clouds Texture</span>
-            <div class="tpick-wrap" id="tpw-fc-tex"><input class="tpick-input" id="fc-tex" placeholder="Search texture…" autocomplete="off"><button class="tpick-clear" id="tpc-fc-tex">✕</button><div class="tpick-dropdown" id="tpd-fc-tex"></div></div></div>
+            <div class="tpick-wrap" id="tpw-fc-tex"><div class="tpick-field"><div class="tpick-preview" id="tpv-fc-tex"><div class="tpick-preview-none">none</div></div><input class="tpick-input" id="fc-tex" placeholder="Search texture…" autocomplete="off"><button class="tpick-clear" id="tpc-fc-tex">✕</button></div><div class="tpick-dropdown" id="tpd-fc-tex"></div></div></div>
           <div class="frow-s">
             <div class="frow-s-top"><span class="flabel">Cutout</span><span class="fval" id="fc-cut-val">—</span><input class="finput" id="fc-cut" type="text" inputmode="decimal" step="0.01" min="-1" max="1" style="flex:0 0 72px;width:72px" oninput="syncSlider('fc-cut',-1,1)"></div>
             <input class="fslider" id="fc-cut-sl" type="range" min="-1" max="1" step="0.01" oninput="syncFromSlider('fc-cut',-1,1,2)">
@@ -560,7 +594,7 @@
         <div id="terrain-fields">
         <div class="fsec-title" style="margin-top:10px">TEXTURE DATA</div>
         <div class="frow"><span class="flabel">Planet Texture</span>
-          <div class="tpick-wrap" id="tpw-tt-pt"><input class="tpick-input" id="tt-pt" placeholder="Search texture…" autocomplete="off"><button class="tpick-clear" id="tpc-tt-pt">✕</button><div class="tpick-dropdown" id="tpd-tt-pt"></div></div></div>
+          <div class="tpick-wrap" id="tpw-tt-pt"><div class="tpick-field"><div class="tpick-preview" id="tpv-tt-pt"><div class="tpick-preview-none">none</div></div><input class="tpick-input" id="tt-pt" placeholder="Search texture…" autocomplete="off"><button class="tpick-clear" id="tpc-tt-pt">✕</button></div><div class="tpick-dropdown" id="tpd-tt-pt"></div></div></div>
         <div class="frow-s">
           <div class="frow-s-top"><span class="flabel">Tex Cutout</span><span class="fval" id="tt-cut-val">—</span><input class="finput" id="tt-cut" type="text" inputmode="decimal" step="0.001" min="-1" max="1" style="flex:0 0 72px;width:72px" oninput="syncSlider('tt-cut',-1,1)"></div>
           <input class="fslider" id="tt-cut-sl" type="range" min="-1" max="1" step="0.001" oninput="syncFromSlider('tt-cut',-1,1,3)">
@@ -572,7 +606,7 @@
         <div class="ftoggle-row"><span class="flabel">Lock Texture to Surface <span style="color:var(--ink4);font-size:.52rem">(DontDistort)</span></span>
           <div class="tog" id="tt-nd" onclick="this.classList.toggle('on')"></div></div>
         <div class="frow"><span class="flabel">Surface Tex A</span>
-          <div class="tpick-wrap" id="tpw-tt-sa"><input class="tpick-input" id="tt-sa" placeholder="Search texture…" autocomplete="off"><button class="tpick-clear" id="tpc-tt-sa">✕</button><div class="tpick-dropdown" id="tpd-tt-sa"></div></div></div>
+          <div class="tpick-wrap" id="tpw-tt-sa"><div class="tpick-field"><div class="tpick-preview" id="tpv-tt-sa"><div class="tpick-preview-none">none</div></div><input class="tpick-input" id="tt-sa" placeholder="Search texture…" autocomplete="off"><button class="tpick-clear" id="tpc-tt-sa">✕</button></div><div class="tpick-dropdown" id="tpd-tt-sa"></div></div></div>
         <div class="frow"><span class="flabel">Surf Size A (x,y)</span>
           <input class="finput" id="tt-sax" type="text" inputmode="decimal" step="1" placeholder="x" style="flex:0 0 55px">
           <input class="finput" id="tt-say" type="text" inputmode="decimal" step="1" placeholder="y" style="flex:0 0 55px">
@@ -581,7 +615,7 @@
           <input class="finput" id="tt-lod-a" type="text" inputmode="decimal" step="1" min="0" placeholder="px (def 80)">
         </div>
         <div class="frow"><span class="flabel">Surface Tex B</span>
-          <div class="tpick-wrap" id="tpw-tt-sb"><input class="tpick-input" id="tt-sb" placeholder="Search texture…" autocomplete="off"><button class="tpick-clear" id="tpc-tt-sb">✕</button><div class="tpick-dropdown" id="tpd-tt-sb"></div></div></div>
+          <div class="tpick-wrap" id="tpw-tt-sb"><div class="tpick-field"><div class="tpick-preview" id="tpv-tt-sb"><div class="tpick-preview-none">none</div></div><input class="tpick-input" id="tt-sb" placeholder="Search texture…" autocomplete="off"><button class="tpick-clear" id="tpc-tt-sb">✕</button></div><div class="tpick-dropdown" id="tpd-tt-sb"></div></div></div>
         <div class="frow"><span class="flabel">Surf Size B (x,y)</span>
           <input class="finput" id="tt-sbx" type="text" inputmode="decimal" step="1" placeholder="x" style="flex:0 0 55px">
           <input class="finput" id="tt-sby" type="text" inputmode="decimal" step="1" placeholder="y" style="flex:0 0 55px">
@@ -590,7 +624,7 @@
           <input class="finput" id="tt-lod-b" type="text" inputmode="decimal" step="1" min="0" placeholder="px (def 80)">
         </div>
         <div class="frow"><span class="flabel">Terrain Tex C</span>
-          <div class="tpick-wrap" id="tpw-tt-tc"><input class="tpick-input" id="tt-tc" placeholder="Search texture…" autocomplete="off"><button class="tpick-clear" id="tpc-tt-tc">✕</button><div class="tpick-dropdown" id="tpd-tt-tc"></div></div></div>
+          <div class="tpick-wrap" id="tpw-tt-tc"><div class="tpick-field"><div class="tpick-preview" id="tpv-tt-tc"><div class="tpick-preview-none">none</div></div><input class="tpick-input" id="tt-tc" placeholder="Search texture…" autocomplete="off"><button class="tpick-clear" id="tpc-tt-tc">✕</button></div><div class="tpick-dropdown" id="tpd-tt-tc"></div></div></div>
         <div class="frow"><span class="flabel">Terrain Size C</span>
           <input class="finput" id="tt-tcx" type="text" inputmode="decimal" step="1" placeholder="x" style="flex:0 0 55px">
           <input class="finput" id="tt-tcy" type="text" inputmode="decimal" step="1" placeholder="y" style="flex:0 0 55px">
@@ -750,7 +784,7 @@
           <div class="tog" id="rng-has" onclick="this.classList.toggle('on');toggleRings()"></div></div>
         <div id="rings-fields" style="opacity:.35;pointer-events:none">
           <div class="frow"><span class="flabel">Rings Texture</span>
-            <div class="tpick-wrap" id="tpw-rng-tex"><input class="tpick-input" id="rng-tex" placeholder="Search texture…" autocomplete="off"><button class="tpick-clear" id="tpc-rng-tex">✕</button><div class="tpick-dropdown" id="tpd-rng-tex"></div></div></div>
+            <div class="tpick-wrap" id="tpw-rng-tex"><div class="tpick-field"><div class="tpick-preview" id="tpv-rng-tex"><div class="tpick-preview-none">none</div></div><input class="tpick-input" id="rng-tex" placeholder="Search texture…" autocomplete="off"><button class="tpick-clear" id="tpc-rng-tex">✕</button></div><div class="tpick-dropdown" id="tpd-rng-tex"></div></div></div>
           <div class="frow"><span class="flabel">Start Radius</span>
             <input class="finput" id="rng-sr" type="text" inputmode="decimal" step="50000" oninput="onDistInput('rng-sr','rng-sr-unit','rng-sr-hint','radius')">
             <select class="funit-sel" id="rng-sr-unit" onchange="onUnitChange('rng-sr','rng-sr-unit','rng-sr-hint','radius')">
@@ -787,7 +821,7 @@
           <div class="tog" id="wt-has" onclick="this.classList.toggle('on');toggleWater()"></div></div>
         <div id="water-fields" style="opacity:.35;pointer-events:none">
           <div class="frow"><span class="flabel">Ocean Mask Tex</span>
-            <div class="tpick-wrap" id="tpw-wt-tex"><input class="tpick-input" id="wt-tex" placeholder="Search texture…" autocomplete="off"><button class="tpick-clear" id="tpc-wt-tex">✕</button><div class="tpick-dropdown" id="tpd-wt-tex"></div></div></div>
+            <div class="tpick-wrap" id="tpw-wt-tex"><div class="tpick-field"><div class="tpick-preview" id="tpv-wt-tex"><div class="tpick-preview-none">none</div></div><input class="tpick-input" id="wt-tex" placeholder="Search texture…" autocomplete="off"><button class="tpick-clear" id="tpc-wt-tex">✕</button></div><div class="tpick-dropdown" id="tpd-wt-tex"></div></div></div>
           <div class="ftoggle-row"><span class="flabel">Lower Terrain</span>
             <div class="tog on" id="wt-lt" onclick="this.classList.toggle('on')"></div></div>
           <div class="frow"><span class="flabel">Ocean Depth</span>

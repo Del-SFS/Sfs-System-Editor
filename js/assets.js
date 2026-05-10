@@ -343,6 +343,7 @@ function commitTexPick(pickId, name){
   inp.classList.toggle('has-val', name !== 'None' && name !== '');
   const clr = document.getElementById('tpc-'+pickId);
   if(clr) clr.classList.toggle('show', name !== 'None' && name !== '');
+  _tpickUpdatePreview(pickId, name);
   closeTexPicker(pickId);
   liveSync();
 }
@@ -384,6 +385,19 @@ function closeTexPicker(pickId){
   if(inp && inp.dataset.lastCommit !== undefined){
     inp.value = inp.dataset.lastCommit;
     inp.classList.toggle('has-val', inp.dataset.lastCommit !== 'None' && inp.dataset.lastCommit !== '');
+    _tpickUpdatePreview(pickId, inp.dataset.lastCommit);
+  }
+}
+
+function _tpickUpdatePreview(pickId, name){
+  // pickId is e.g. 'av-tex'; preview container is 'tpv-av-tex'
+  const prev = document.getElementById('tpv-' + pickId);
+  if(!prev) return;
+  const thumb = (name && name !== 'None') ? getTexThumb(name) : null;
+  if(thumb){
+    prev.innerHTML = `<img src="${thumb}" alt="${name}">`;
+  } else {
+    prev.innerHTML = '<div class="tpick-preview-none">none</div>';
   }
 }
 
@@ -396,6 +410,7 @@ function setTexPick(pickId, value){
   inp.classList.toggle('has-val', v !== 'None');
   const clr = document.getElementById('tpc-'+pickId);
   if(clr) clr.classList.toggle('show', v !== 'None');
+  _tpickUpdatePreview(pickId, v);
 }
 
 // val() override for tpick inputs — reading .value gives the texture name directly, 
@@ -411,13 +426,16 @@ function setSelectVal(id, v){
 
 // Rebuild all picker dropdowns when texture list changes (uploads etc.)
 function refreshTexPickerLists(){
-  // Nothing to pre-build — dropdowns are built on open. Just update thumbs if open.
+  // Rebuild open dropdowns and refresh all previews (new textures may now have thumbs)
   TPICK_IDS.forEach(id => {
     const dd = document.getElementById('tpd-'+id);
     if(dd && dd.classList.contains('open')){
       const inp = document.getElementById(id);
       buildDropdownItems(id, inp ? inp.value : '');
     }
+    // Refresh preview in case a texture thumbnail just became available
+    const inp = document.getElementById(id);
+    if(inp && inp.dataset.lastCommit) _tpickUpdatePreview(id, inp.dataset.lastCommit);
   });
 }
 
