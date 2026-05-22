@@ -442,6 +442,9 @@ vp.addEventListener('click', e => {
   if(dragOrbitMode) return; // click does nothing in drag orbit mode
   // Ignore drag moves
   if(Math.abs(e.clientX - dragSX) > 4 || Math.abs(e.clientY - dragSY) > 4) return;
+  // If a hold just opened the context menu, swallow the trailing click so the sidebar
+  // doesn't open on top of it
+  if(_ctxEl().style.display !== 'none') return;
   // If the image overlay handled the mousedown (select/deselect/drag), don't body-select
   if(_imgConsumedDown) { _imgConsumedDown = false; return; }
   // In group-select mode, taps toggle selection instead of opening sidebar

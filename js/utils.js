@@ -23,7 +23,7 @@ document.addEventListener('mousedown', e => {
   try {
     const wrap = document.getElementById('utils-dropdown-wrap');
     const dd   = document.getElementById('utils-dropdown');
-    if (wrap && !wrap.contains(e.target) && dd && !dd.contains(e.target)) {
+    if (dd && !dd.contains(e.target) && (!wrap || !wrap.contains(e.target))) {
       _utilsDropOpen = false;
       dd.style.display = 'none';
     }
