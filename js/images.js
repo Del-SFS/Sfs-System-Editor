@@ -13,9 +13,11 @@ let   _imgNextId   = 1;
 
 // ── Panel open/close ───────────────────────────────────────────────────────────
 function openImagePanel() {
-  _utilsDropOpen = false;
-  document.getElementById('utils-dropdown').style.display = 'none';
-  document.getElementById('img-panel').classList.add('open');
+  if (typeof _utilsDropOpen !== 'undefined') _utilsDropOpen = false;
+  const dropdown = document.getElementById('utils-dropdown');
+  if (dropdown) dropdown.style.display = 'none';
+  const panel = document.getElementById('img-panel');
+  if (panel) panel.classList.add('open');
 }
 function closeImagePanel() {
   document.getElementById('img-panel').classList.remove('open');
