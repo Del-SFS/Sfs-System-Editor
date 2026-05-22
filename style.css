@@ -1687,16 +1687,9 @@ body {
   .menu-btn::before, .menu-btn::after { pointer-events: none; }
   .menu-btn:active  { color: var(--sky3); border-bottom-color: var(--sky2); }
 
-  /* Texture picker dropdown: absolute inside wrap on touch, pops ABOVE input (away from keyboard) */
-  .tpick-dropdown {
-    position: absolute !important;
-    bottom: calc(100% + 2px) !important; top: auto !important;
-    left: 0 !important; right: 0 !important; width: auto !important;
-    z-index: 500;
-    max-height: 45vmax;
-  }
+  /* Texture picker dropdown is portalled to <body> with fixed positioning on all devices */
+  /* (handled in JS — no CSS overrides needed here) */
   /* Allow dropdown to escape sidebar's overflow clip */
-  #sidebar { overflow: visible !important; }
   #sidebar .sb-body { overflow-y: auto; }
   .mf-btn:active    { background: var(--ac18); color: var(--ink3); }
   .tb-btn:active    { background: var(--ac15); color: var(--ink3); }

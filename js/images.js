@@ -13,11 +13,18 @@ let   _imgNextId   = 1;
 
 // ── Panel open/close ───────────────────────────────────────────────────────────
 function openImagePanel() {
+  console.log('openImagePanel called');
   if (typeof _utilsDropOpen !== 'undefined') _utilsDropOpen = false;
   const dropdown = document.getElementById('utils-dropdown');
   if (dropdown) dropdown.style.display = 'none';
   const panel = document.getElementById('img-panel');
-  if (panel) panel.classList.add('open');
+  console.log('img-panel element:', panel);
+  if (panel) {
+    panel.classList.add('open');
+    console.log('Added open class, transform should be:', window.getComputedStyle(panel).transform);
+  } else {
+    console.error('img-panel element not found!');
+  }
 }
 function closeImagePanel() {
   document.getElementById('img-panel').classList.remove('open');

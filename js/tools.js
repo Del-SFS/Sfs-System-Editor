@@ -691,6 +691,9 @@ vp.addEventListener('touchend', e => {
         return;
       }
 
+      // Suppress tap if a hold-context-menu just fired on this same touch
+      if(_holdFired){ _holdFired = false; return; }
+
       // Group-select mode: tap toggles body selection
       if(_groupSelHandleTap(t.clientX, t.clientY)) return;
 
@@ -1227,6 +1230,7 @@ let _ctxMenu       = null;   // the DOM element (fetched on first use)
 let _ctxMenuBody   = null;   // which body the menu is showing for
 let _holdTimer     = null;   // setTimeout handle
 let _holdMoved     = false;  // pointer moved too far during hold → cancel
+let _holdFired     = false;  // hold completed and ctx menu opened — suppress next touchend tap
 let _holdStartX    = 0;
 let _holdStartY    = 0;
 const HOLD_MS       = 500;    // hold duration
@@ -1318,6 +1322,7 @@ vp.addEventListener('touchstart', e => {
   if(e.touches.length !== 1) { clearTimeout(_holdTimer); return; }
   const t = e.touches[0];
   _holdMoved = false;
+  _holdFired = false;
   _holdStartX = t.clientX; _holdStartY = t.clientY;
   _holdTouchDeadUntil = Date.now() + HOLD_DEAD_MS;
   _holdTimer = setTimeout(() => {
@@ -1325,6 +1330,7 @@ vp.addEventListener('touchstart', e => {
     const hit = _hitBodyAt(t.clientX, t.clientY);
     if(hit){
       if(navigator.vibrate) navigator.vibrate(40);
+      _holdFired = true;  // suppress the imminent touchend from selecting the body
       openBodyCtxMenu(hit, t.clientX, t.clientY);
     }
   }, HOLD_MS);
@@ -1455,6 +1461,8 @@ let groupSelectMode = false;
 function _gsPanel(){ return document.getElementById('group-sel-panel'); }
 
 function enterGroupSelect(seedBody){
+  // Don't activate if no system is loaded (viewport not active)
+  if(!document.getElementById('viewport').classList.contains('active')) return;
   groupSelectMode = true;
   groupSelected   = new Set();
   if(seedBody) groupSelected.add(seedBody);
@@ -1486,7 +1494,10 @@ function exitGroupSelect(){
 function _gsOpenPanel(){
   const p = _gsPanel();
   if(p) p.classList.add('open');
-  document.getElementById('statusbar').style.right = '240px';
+  // On mobile the statusbar always stays full-width (CSS override), so only
+  // push it on desktop.
+  const isMobile = window.matchMedia('(max-width:640px)').matches;
+  if(!isMobile) document.getElementById('statusbar').style.right = '190px';
   setTimeout(resizeViewport, 360);
   _gsRebuildPanel();
 }

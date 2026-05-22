@@ -453,21 +453,32 @@ function openTexPicker(pickId){
   const dd = document.getElementById('tpd-'+pickId);
   const inp = document.getElementById(pickId);
   if(!dd || !inp) return;
-  // On touch devices the dropdown is position:absolute (CSS override),
-  // so fixed coords are not needed and would be wrong after keyboard resize.
+  // Position dropdown with fixed coords — works for both desktop and touch since
+  // we now portal the dropdown to <body> on all devices.
+  // On touch we always place the dropdown ABOVE the input to clear the keyboard.
   const isTouch = window.matchMedia('(pointer: coarse)').matches;
-  if(!isTouch){
-    // Desktop: position dropdown using fixed coords (escapes overflow:auto sidebar)
+  {
     const rect = inp.getBoundingClientRect();
+    dd.style.position = 'fixed';
     dd.style.left  = rect.left + 'px';
     dd.style.width = rect.width + 'px';
-    const spaceBelow = window.innerHeight - rect.bottom;
-    if(spaceBelow >= 160 || spaceBelow > window.innerHeight - rect.top){
-      dd.style.top    = (rect.bottom + 2) + 'px';
-      dd.style.bottom = 'auto';
-    } else {
+    dd.style.zIndex = '999999';
+    if(isTouch){
+      // Always open above on mobile (keyboard takes up bottom half)
       dd.style.bottom = (window.innerHeight - rect.top + 2) + 'px';
       dd.style.top    = 'auto';
+      // Cap height so it doesn't overflow the top of the screen
+      dd.style.maxHeight = Math.min(rect.top - 56, window.innerHeight * 0.55) + 'px';
+    } else {
+      dd.style.maxHeight = '';
+      const spaceBelow = window.innerHeight - rect.bottom;
+      if(spaceBelow >= 160 || spaceBelow > window.innerHeight - rect.top){
+        dd.style.top    = (rect.bottom + 2) + 'px';
+        dd.style.bottom = 'auto';
+      } else {
+        dd.style.bottom = (window.innerHeight - rect.top + 2) + 'px';
+        dd.style.top    = 'auto';
+      }
     }
   }
   buildDropdownItems(pickId, '');
@@ -549,15 +560,9 @@ function initTexPickers(){
     let   dd  = document.getElementById('tpd-'+pickId);
     if(!inp || !dd) return;
 
-    // On desktop: move dropdown to <body> so it escapes the sidebar's
-    // transform stacking context (transform:translateX makes position:fixed
-    // relative to the sidebar, not the viewport).
-    // On touch: keep dropdown inside .tpick-wrap so that the CSS
-    // `position:absolute; bottom:calc(100% + 2px)` correctly places it
-    // above the input (above the software keyboard).
-    if(!isTouch){
-      document.body.appendChild(dd);
-    }
+    // Move dropdown to <body> on ALL devices — escapes sidebar overflow/transform
+    // clipping. Touch gets JS-calculated fixed position (above input, clears keyboard).
+    document.body.appendChild(dd);
 
     // mousedown on input: open picker, stop propagation so _tpickOutside doesn't
     // immediately close it on the same event.
@@ -576,11 +581,15 @@ function initTexPickers(){
     // Desktop gets a shorter delay (50 ms) for snappier feel; touch gets 150 ms.
     let _tpickTimer = null;
     inp.addEventListener('input', () => {
-      if(!isTouch){
-        // Reposition dropdown on desktop
-        const rect = inp.getBoundingClientRect();
-        dd.style.left  = rect.left + 'px';
-        dd.style.width = rect.width + 'px';
+      // Reposition on every keystroke (fixed-positioned dropdown can drift if keyboard resizes)
+      const rect = inp.getBoundingClientRect();
+      dd.style.left  = rect.left + 'px';
+      dd.style.width = rect.width + 'px';
+      if(isTouch){
+        dd.style.bottom = (window.innerHeight - rect.top + 2) + 'px';
+        dd.style.top    = 'auto';
+        dd.style.maxHeight = Math.min(rect.top - 56, window.innerHeight * 0.55) + 'px';
+      } else {
         const spaceBelow = window.innerHeight - rect.bottom;
         if(spaceBelow >= 160 || spaceBelow > window.innerHeight - rect.top){
           dd.style.top    = (rect.bottom + 2) + 'px';
