@@ -133,20 +133,19 @@ function imgDrawOverlays(ctx, vpZ_, vpOffX_, vpOffY_, vpW, vpH) {
     // Selection outline
     if(_imgSelected === ov.id) {
       ctx.strokeStyle = 'rgba(100,220,180,0.85)';
-      ctx.lineWidth   = 1.5 / vpZ_;
-      ctx.setLineDash([6 / vpZ_, 4 / vpZ_]);
+      ctx.lineWidth   = 1.5;
+      ctx.setLineDash([6, 4]);
       ctx.strokeRect(-sw / 2, -sh / 2, sw, sh);
       ctx.setLineDash([]);
-      // Corner handles
+      // Corner handles — fixed 5px screen-space squares
+      const hr = 5;
       _imgHandleCorners(sw, sh).forEach(([hx, hy]) => {
         ctx.fillStyle = 'rgba(100,220,180,0.9)';
-        const hr = Math.min(5 / vpZ_, 8); // clamp to 8px screen-space max
         ctx.fillRect(hx - hr, hy - hr, hr * 2, hr * 2);
       });
-      // Rotation handle (top-centre)
+      // Rotation handle (top-centre) — fixed 5px radius, 18px above top edge
       ctx.beginPath();
-      const rhr = Math.min(5 / vpZ_, 8);
-      ctx.arc(0, -sh / 2 - Math.min(18 / vpZ_, 18), rhr, 0, Math.PI * 2);
+      ctx.arc(0, -sh / 2 - 18, 5, 0, Math.PI * 2);
       ctx.fillStyle = 'rgba(255,200,80,0.9)';
       ctx.fill();
     }
@@ -209,13 +208,13 @@ function _imgHandleAt(sx, sy) {
   const lx = cos * dx - sin * dy;
   const ly = sin * dx + cos * dy;
 
-  // Rotation handle
-  if(Math.hypot(lx, ly - (-sh / 2 - Math.min(18, 18 / vpZ))) < Math.min(10, 10 / vpZ) + 6) return 'rotate';
-  // Corner handles — return index (0=TL,1=TR,2=BL,3=BR)
+  // Rotation handle — 18px above top edge, 11px hit radius
+  if(Math.hypot(lx, ly - (-sh / 2 - 18)) < 11) return 'rotate';
+  // Corner handles — 11px hit radius (fixed screen pixels)
   const corners = _imgHandleCorners(sw, sh);
   for(let i = 0; i < corners.length; i++) {
     const [hx, hy] = corners[i];
-    if(Math.hypot(lx - hx, ly - hy) < Math.min(10, 10 / vpZ) + 6) return i;
+    if(Math.hypot(lx - hx, ly - hy) < 11) return i;
   }
   return null;
 }

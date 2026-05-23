@@ -1285,6 +1285,7 @@ function _hitBodyAt(clientX, clientY){
 }
 
 function openBodyCtxMenu(bodyName, clientX, clientY){
+  _updatePasteState();
   _ctxMenuBody = bodyName;
   const el = _ctxEl();
   document.getElementById('bctx-title').textContent = bodyName.toUpperCase();
@@ -1431,12 +1432,6 @@ function _updatePasteState(){
 }
 
 // Also update paste state every time the menu opens
-const _origOpenBodyCtxMenu = openBodyCtxMenu;
-function openBodyCtxMenu(bodyName, clientX, clientY){
-  _updatePasteState();
-  _origOpenBodyCtxMenu(bodyName, clientX, clientY);
-}
-
 // Keyboard shortcuts: Ctrl/Cmd + X / C / V when a body is selected or menu open
 document.addEventListener('keydown', e => {
   const mod = e.ctrlKey || e.metaKey;
