@@ -7,6 +7,7 @@
 const _imgOverlays = [];     // array of overlay objects
 let   _imgSelected = null;   // currently selected overlay id
 let   _imgNextId   = 1;
+let   _imgAspectLocked = true; // aspect ratio lock (default on)
 
 // Each overlay: { id, name, img, worldX, worldY, worldW, worldH, rotation,
 //                opacity, clickThrough, lockToBody, _imgEl(HTMLImageElement) }
@@ -96,7 +97,9 @@ function _imgAddOverlay(name, dataUrl) {
 // ── Draw all overlays (called from _drawViewportNow hook) ─────────────────────
 function imgDrawOverlays(ctx, vpZ_, vpOffX_, vpOffY_, vpW, vpH) {
   _imgOverlays.forEach(ov => {
-    // Resolve lock-to-body offset
+    // Resolve lock-to-body: _lockOffX/Y is offset of image TOP-LEFT from body centre
+    // When first locked (image already placed), offset preserves visual position.
+    // The centre of the image = body + offset + (w/2, h/2)
     let wx = ov.worldX, wy = ov.worldY;
     if(ov.lockToBody && ov.lockToBody !== 'None' && typeof bodyWorldPos !== 'undefined') {
       const bp = bodyWorldPos[ov.lockToBody];
@@ -199,9 +202,11 @@ function _imgHandleAt(sx, sy) {
 
   // Rotation handle
   if(Math.hypot(lx, ly - (-sh / 2 - Math.min(18, 18 / vpZ_))) < Math.min(10, 10 / vpZ_) + 6) return 'rotate';
-  // Corner handles
-  for(const [hx, hy] of _imgHandleCorners(sw, sh)) {
-    if(Math.hypot(lx - hx, ly - hy) < Math.min(10, 10 / vpZ_) + 6) return 'corner';
+  // Corner handles — return index (0=TL,1=TR,2=BL,3=BR)
+  const corners = _imgHandleCorners(sw, sh);
+  for(let i = 0; i < corners.length; i++) {
+    const [hx, hy] = corners[i];
+    if(Math.hypot(lx - hx, ly - hy) < Math.min(10, 10 / vpZ_) + 6) return i;
   }
   return null;
 }
@@ -220,16 +225,17 @@ function _imgSelectOverlay(id) {
 function imgMouseDown(mx, my, clientX, clientY) {
   // Check handles first (only if an image is selected)
   const handle = _imgHandleAt(mx, my);
-  if(handle) {
+  if(handle !== null && handle !== false) {
     const ov = _imgOverlays.find(o => o.id === _imgSelected);
     _imgDrag = {
-      type: handle === 'rotate' ? 'rotate' : 'corner',
+      type: typeof handle === 'number' ? 'corner' : handle === 'rotate' ? 'rotate' : 'corner',
       ovId: ov.id,
       startX: clientX, startY: clientY,
       startWX: ov.worldX, startWY: ov.worldY,
       startW: ov.worldW, startH: ov.worldH,
       startRot: ov.rotation,
       aspect: ov.worldH / ov.worldW,
+      cornerIdx: typeof handle === 'number' ? handle : 0,
     };
     return true; // consumed
   }
@@ -272,9 +278,26 @@ function imgMouseMove(clientX, clientY) {
       ov.worldY = _imgDrag.startWY + dy;
     }
   } else if(_imgDrag.type === 'corner') {
-    const newW = Math.max(20 / vpZ, _imgDrag.startW + dx * 2);
+    // Which corner index: 0=TL,1=TR,2=BL,3=BR
+    const ci = _imgDrag.cornerIdx;
+    const signX = (ci === 1 || ci === 3) ? 1 : -1; // right corners → positive X
+    const signY = (ci === 2 || ci === 3) ? 1 : -1; // bottom corners → positive Y
+    // Project drag delta onto the image axes (accounting for rotation)
+    const cos = Math.cos(ov.rotation), sin = Math.sin(ov.rotation);
+    const ldx = cos * dx + sin * dy; // delta in image-local X
+    const ldy = -sin * dx + cos * dy; // delta in image-local Y
+    const newW = Math.max(20 / vpZ, _imgDrag.startW + signX * ldx * 2);
+    const newH = _imgAspectLocked
+      ? newW * _imgDrag.aspect
+      : Math.max(20 / vpZ, _imgDrag.startH + signY * ldy * 2);
+    // Keep centre fixed: adjust worldX/Y so centre doesn't move
+    const dw = newW - _imgDrag.startW;
+    const dh = newH - _imgDrag.startH;
     ov.worldW = newW;
-    ov.worldH = newW * _imgDrag.aspect;
+    ov.worldH = newH;
+    // Centre was at startWX + startW/2; keep it there
+    ov.worldX = _imgDrag.startWX - dw / 2;
+    ov.worldY = _imgDrag.startWY - dh / 2;
   } else if(_imgDrag.type === 'rotate') {
     const { wx, wy } = _imgWorldXY(ov);
     const cx = (wx + vpOffX) * vpZ + vp.width  / 2 + ov.worldW * vpZ / 2;
@@ -312,6 +335,15 @@ function _imgUpdateSidebar() {
   _imgSetField('img-d-height',  Math.round(ov.worldH));
   _imgSetCheck('img-d-clickthrough', ov.clickThrough);
 
+  // Sync aspect lock button
+  const alBtn = document.getElementById('img-d-aspect-lock');
+  if(alBtn) {
+    alBtn.textContent = _imgAspectLocked ? '🔗' : '⛓️‍💥';
+    alBtn.style.borderColor = _imgAspectLocked ? 'var(--ac65)' : 'var(--ac20)';
+    alBtn.style.background  = _imgAspectLocked ? 'var(--hp1)'  : 'var(--dp3)';
+    alBtn.title = _imgAspectLocked ? 'Aspect ratio locked' : 'Aspect ratio unlocked';
+  }
+
   // Sync range sliders
   const osl = document.getElementById('img-d-opacity-sl');
   const rsl = document.getElementById('img-d-rotate-sl');
@@ -344,12 +376,12 @@ function imgFieldChange(field, value) {
   if(field === 'rotate')      ov.rotation    = (parseFloat(value) || 0) * Math.PI / 180;
   if(field === 'width')  {
     const w = Math.max(1, parseFloat(value) || 1);
-    ov.worldH = ov.worldH * (w / ov.worldW);
+    if(_imgAspectLocked) ov.worldH = ov.worldH * (w / ov.worldW);
     ov.worldW = w;
   }
   if(field === 'height') {
     const h = Math.max(1, parseFloat(value) || 1);
-    ov.worldW = ov.worldW * (h / ov.worldH);
+    if(_imgAspectLocked) ov.worldW = ov.worldW * (h / ov.worldH);
     ov.worldH = h;
   }
   if(field === 'clickthrough') ov.clickThrough = value;
@@ -357,17 +389,31 @@ function imgFieldChange(field, value) {
     const prev = ov.lockToBody;
     ov.lockToBody = value;
     if(value !== 'None' && prev === 'None') {
-      // Compute offset from body position
       const bp = typeof bodyWorldPos !== 'undefined' ? bodyWorldPos[value] : null;
-      if(bp) { ov._lockOffX = ov.worldX - bp.x; ov._lockOffY = ov.worldY - bp.y; }
+      if(bp) {
+        // Store offset of image top-left from body centre
+        // so the image stays exactly where it is visually
+        ov._lockOffX = ov.worldX - bp.x;
+        ov._lockOffY = ov.worldY - bp.y;
+      }
     } else if(value === 'None' && prev !== 'None') {
-      // Resolve current position back to worldX/Y
       const { wx, wy } = _imgWorldXY(ov);
       ov.worldX = wx; ov.worldY = wy;
     }
   }
   _imgUpdateSidebar();
   drawViewport();
+}
+
+function imgToggleAspectLock() {
+  _imgAspectLocked = !_imgAspectLocked;
+  const btn = document.getElementById('img-d-aspect-lock');
+  if(btn) {
+    btn.textContent = _imgAspectLocked ? '🔗' : '⛓️‍💥';
+    btn.style.borderColor = _imgAspectLocked ? 'var(--ac65)' : 'var(--ac20)';
+    btn.style.background  = _imgAspectLocked ? 'var(--hp1)'  : 'var(--dp3)';
+    btn.title = _imgAspectLocked ? 'Aspect ratio locked' : 'Aspect ratio unlocked';
+  }
 }
 
 function imgDeleteSelected() {

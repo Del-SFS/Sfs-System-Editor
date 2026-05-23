@@ -3192,12 +3192,18 @@ document.addEventListener('keydown', function(e){
     </div>
 
     <!-- Width / Height -->
-    <div style="display:flex;gap:8px;margin-bottom:10px">
+    <div style="display:flex;gap:8px;margin-bottom:10px;align-items:flex-end">
       <div style="flex:1">
         <div class="img-field-label">WIDTH</div>
         <input id="img-d-width" type="number" min="1" step="1"
           class="img-field-input" oninput="imgFieldChange('width',this.value)">
       </div>
+      <button id="img-d-aspect-lock" onclick="imgToggleAspectLock()"
+        title="Lock aspect ratio"
+        style="flex-shrink:0;width:28px;height:28px;margin-bottom:1px;background:var(--dp3);
+               border:1px solid var(--ac20);border-radius:4px;cursor:pointer;
+               color:var(--ac65);font-size:.8rem;display:flex;align-items:center;
+               justify-content:center;transition:background .15s,border-color .15s">🔗</button>
       <div style="flex:1">
         <div class="img-field-label">HEIGHT</div>
         <input id="img-d-height" type="number" min="1" step="1"
