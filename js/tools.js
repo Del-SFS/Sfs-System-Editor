@@ -1309,43 +1309,66 @@ function closeBodyCtxMenu(){
   _ctxMenuBody = null;
 }
 
-// Dismiss when clicking outside
-document.addEventListener('pointerdown', e => {
-  if(_ctxEl().style.display !== 'none' && !_ctxEl().contains(e.target)){
-    closeBodyCtxMenu();
-  }
-}, true);
+// Dismiss when clicking/tapping outside
+function _dismissCtxIfOutside(target) {
+  if(_ctxEl().style.display !== 'none' && !_ctxEl().contains(target)) closeBodyCtxMenu();
+}
+document.addEventListener('mousedown', e => _dismissCtxIfOutside(e.target), true);
+document.addEventListener('touchstart', e => _dismissCtxIfOutside(e.target), { capture: true, passive: true });
 
-// ── Hold-detect: single pointer-based implementation (mouse + touch) ─────
-let _holdTouchDeadUntil = 0;
-
-vp.addEventListener('pointerdown', e => {
-  if(e.button !== 0 && e.pointerType === 'mouse') return;
+// ── Hold-detect (mouse + touch) ───────────────────────────────────────────
+function _startHold(clientX, clientY, isTouch) {
   _holdMoved  = false;
   _holdFired  = false;
-  _holdStartX = e.clientX;
-  _holdStartY = e.clientY;
+  _holdStartX = clientX;
+  _holdStartY = clientY;
   clearTimeout(_holdTimer);
   _holdTimer = setTimeout(() => {
     if(_holdMoved) return;
-    const hit = _hitBodyAt(e.clientX, e.clientY);
-    if(hit){
-      if(e.pointerType === 'touch' && navigator.vibrate) navigator.vibrate(40);
+    const hit = _hitBodyAt(clientX, clientY);
+    if(hit) {
+      if(isTouch && navigator.vibrate) navigator.vibrate(40);
       _holdFired = true;
-      openBodyCtxMenu(hit, e.clientX, e.clientY);
+      openBodyCtxMenu(hit, clientX, clientY);
     }
   }, HOLD_MS);
-});
+}
 
-vp.addEventListener('pointermove', e => {
-  if(Math.hypot(e.clientX - _holdStartX, e.clientY - _holdStartY) > HOLD_MAX_MOVE_TOUCH){
-    _holdMoved = true;
-    clearTimeout(_holdTimer);
+function _cancelHold() {
+  clearTimeout(_holdTimer);
+}
+
+// Mouse
+vp.addEventListener('mousedown', e => {
+  if(e.button !== 0) return;
+  _startHold(e.clientX, e.clientY, false);
+});
+vp.addEventListener('mousemove', e => {
+  if(Math.hypot(e.clientX - _holdStartX, e.clientY - _holdStartY) > HOLD_MAX_MOVE_TOUCH) {
+    _holdMoved = true; _cancelHold();
   }
 });
+vp.addEventListener('mouseup', _cancelHold);
 
-vp.addEventListener('pointerup',     () => { clearTimeout(_holdTimer); });
-vp.addEventListener('pointercancel', () => { clearTimeout(_holdTimer); _holdFired = false; });
+// Touch — piggyback on the existing touchstart/touchend (non-capture, after e.preventDefault)
+// We attach with capture:false so the existing handler's e.preventDefault() doesn't affect us,
+// and passive:true so we don't block scrolling.
+vp.addEventListener('touchstart', e => {
+  if(e.touches.length !== 1) { _cancelHold(); return; }
+  const t = e.touches[0];
+  _startHold(t.clientX, t.clientY, true);
+}, { passive: true });
+
+vp.addEventListener('touchmove', e => {
+  if(e.touches.length !== 1) { _holdMoved = true; _cancelHold(); return; }
+  const t = e.touches[0];
+  if(Math.hypot(t.clientX - _holdStartX, t.clientY - _holdStartY) > HOLD_MAX_MOVE_TOUCH) {
+    _holdMoved = true; _cancelHold();
+  }
+}, { passive: true });
+
+vp.addEventListener('touchend',    _cancelHold, { passive: true });
+vp.addEventListener('touchcancel', _cancelHold, { passive: true });
 
 // ── Menu action functions ─────────────────────────────────────────────────
 // ── Clipboard state ───────────────────────────────────────────────────────
