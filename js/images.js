@@ -128,12 +128,13 @@ function imgDrawOverlays(ctx, vpZ_, vpOffX_, vpOffY_, vpW, vpH) {
       // Corner handles
       _imgHandleCorners(sw, sh).forEach(([hx, hy]) => {
         ctx.fillStyle = 'rgba(100,220,180,0.9)';
-        const hr = 5 / vpZ_;
+        const hr = Math.min(5 / vpZ_, 8); // clamp to 8px screen-space max
         ctx.fillRect(hx - hr, hy - hr, hr * 2, hr * 2);
       });
       // Rotation handle (top-centre)
       ctx.beginPath();
-      ctx.arc(0, -sh / 2 - 18 / vpZ_, 5 / vpZ_, 0, Math.PI * 2);
+      const rhr = Math.min(5 / vpZ_, 8);
+      ctx.arc(0, -sh / 2 - Math.min(18 / vpZ_, 18), rhr, 0, Math.PI * 2);
       ctx.fillStyle = 'rgba(255,200,80,0.9)';
       ctx.fill();
     }
@@ -197,10 +198,10 @@ function _imgHandleAt(sx, sy) {
   const ly = sin * dx + cos * dy;
 
   // Rotation handle
-  if(Math.hypot(lx, ly - (-sh / 2 - 18)) < 10) return 'rotate';
+  if(Math.hypot(lx, ly - (-sh / 2 - Math.min(18, 18 / vpZ_))) < Math.min(10, 10 / vpZ_) + 6) return 'rotate';
   // Corner handles
   for(const [hx, hy] of _imgHandleCorners(sw, sh)) {
-    if(Math.hypot(lx - hx, ly - hy) < 10) return 'corner';
+    if(Math.hypot(lx - hx, ly - hy) < Math.min(10, 10 / vpZ_) + 6) return 'corner';
   }
   return null;
 }
