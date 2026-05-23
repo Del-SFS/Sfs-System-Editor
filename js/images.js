@@ -357,16 +357,15 @@ function imgMouseMove(clientX, clientY) {
     const cos = Math.cos(ov.rotation), sin = Math.sin(ov.rotation);
     const ldx = cos * dx + sin * dy; // delta in image-local X
     const ldy = -sin * dx + cos * dy; // delta in image-local Y
-    const newW = Math.max(20 / vpZ, _imgDrag.startW + signX * ldx * 2);
+    const newW = Math.max(20 / vpZ, _imgDrag.startW + signX * ldx);
     const newH = _imgAspectLocked
       ? newW * _imgDrag.aspect
-      : Math.max(20 / vpZ, _imgDrag.startH + signY * ldy * 2);
-    // Keep centre fixed: adjust worldX/Y so centre doesn't move
+      : Math.max(20 / vpZ, _imgDrag.startH + signY * ldy);
+    // Keep centre fixed: adjust worldX/Y so centre (startWX + startW/2) doesn't move
     const dw = newW - _imgDrag.startW;
     const dh = newH - _imgDrag.startH;
     ov.worldW = newW;
     ov.worldH = newH;
-    // Centre was at startWX + startW/2; keep it there
     ov.worldX = _imgDrag.startWX - dw / 2;
     ov.worldY = _imgDrag.startWY - dh / 2;
   } else if(_imgDrag.type === 'rotate') {
@@ -462,17 +461,19 @@ function imgFieldChange(field, value) {
     const prev = ov.lockToBody;
     ov.lockToBody = value;
     if(value !== 'None') {
+      // drawViewport populates bodyWorldPos — call it first to ensure positions are current
+      drawViewport();
       const bp = typeof bodyWorldPos !== 'undefined' ? bodyWorldPos[value] : null;
       if(bp) {
-        // Centre the image on the body: offset = top-left relative to body centre = -halfW, -halfH
+        // Centre the image on the body: _lockOffX/Y = offset of top-left from body centre
         ov._lockOffX = -ov.worldW / 2;
         ov._lockOffY = -ov.worldH / 2;
-        // Also update worldX/Y so unlocking later keeps the correct position
+        // Bake into worldX/Y so unlocking preserves position
         ov.worldX = bp.x + ov._lockOffX;
         ov.worldY = bp.y + ov._lockOffY;
       }
-    } else if(value === 'None' && prev !== 'None') {
-      // Unlocking: bake current locked position into worldX/Y
+    } else if(prev !== 'None') {
+      // Unlocking: bake current locked world position into worldX/Y
       const { wx, wy } = _imgWorldXY(ov);
       ov.worldX = wx; ov.worldY = wy;
     }
