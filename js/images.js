@@ -461,23 +461,20 @@ function imgFieldChange(field, value) {
   if(field === 'lock') {
     const prev = ov.lockToBody;
     ov.lockToBody = value;
-    console.log('[IMG] Lock changed:', prev, '→', value);
-    if(value !== 'None' && prev === 'None') {
+    if(value !== 'None') {
       const bp = typeof bodyWorldPos !== 'undefined' ? bodyWorldPos[value] : null;
-      console.log('[IMG] Locking to body:', value, 'bodyWorldPos:', bp, 'current pos:', ov.worldX, ov.worldY);
       if(bp) {
-        // Store offset of image top-left from body centre
-        // so the image stays exactly where it is visually
-        ov._lockOffX = ov.worldX - bp.x;
-        ov._lockOffY = ov.worldY - bp.y;
-        console.log('[IMG] Lock offsets set:', ov._lockOffX, ov._lockOffY);
-      } else {
-        console.warn('[IMG] Body not found in bodyWorldPos!', 'Available:', typeof bodyWorldPos !== 'undefined' ? Object.keys(bodyWorldPos) : 'undefined');
+        // Centre the image on the body: offset = top-left relative to body centre = -halfW, -halfH
+        ov._lockOffX = -ov.worldW / 2;
+        ov._lockOffY = -ov.worldH / 2;
+        // Also update worldX/Y so unlocking later keeps the correct position
+        ov.worldX = bp.x + ov._lockOffX;
+        ov.worldY = bp.y + ov._lockOffY;
       }
     } else if(value === 'None' && prev !== 'None') {
+      // Unlocking: bake current locked position into worldX/Y
       const { wx, wy } = _imgWorldXY(ov);
       ov.worldX = wx; ov.worldY = wy;
-      console.log('[IMG] Unlocked, world pos:', wx, wy);
     }
   }
   _imgUpdateSidebar();
