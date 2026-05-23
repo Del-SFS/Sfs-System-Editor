@@ -1292,7 +1292,9 @@ function openBodyCtxMenu(bodyName, clientX, clientY){
   const isCenter = !!(bodies[bodyName]?.isCenter);
   const cutBtn   = document.getElementById('bctx-cut');
   const grpBtn   = document.getElementById('bctx-group');
+  const copyBtn  = document.getElementById('bctx-copy');
   if(cutBtn)  cutBtn.classList.toggle('disabled', isCenter);
+  if(copyBtn) copyBtn.classList.toggle('disabled', isCenter);
   if(grpBtn)  grpBtn.classList.toggle('disabled', isCenter);
 
   // Position: keep inside viewport
@@ -1404,6 +1406,7 @@ function bctxCopy(){
   const name = _ctxMenuBody;
   closeBodyCtxMenu();
   if(!name || !bodies[name]) return;
+  if(bodies[name].isCenter) return; // cannot copy the system centre
   _bodyClipboard = { name, data: JSON.parse(JSON.stringify(bodies[name].data)), preset: bodies[name].preset };
   _updatePasteState();
 }
@@ -1411,15 +1414,23 @@ function bctxCopy(){
 function bctxPaste(){
   closeBodyCtxMenu();
   if(!_bodyClipboard) return;
-  // Generate a unique name: "<original>_copy", "<original>_copy2", etc.
+  // Generate a unique name
   let newName = _bodyClipboard.name + '_copy';
   let n = 2;
   while(bodies[newName]) { newName = _bodyClipboard.name + '_copy' + n++; }
   pushUndo();
-  bodies[newName] = {
-    preset: _bodyClipboard.preset,
-    data:   JSON.parse(JSON.stringify(_bodyClipboard.data))
-  };
+  const newData = JSON.parse(JSON.stringify(_bodyClipboard.data));
+  // Sanitize: strip isCenter — a copy can never be the system centre
+  delete newData.isCenter;
+  // Offset SMA slightly so it doesn't sit exactly on top of the original
+  if(newData.ORBIT_DATA) {
+    newData.ORBIT_DATA.SMA = (parseFloat(newData.ORBIT_DATA.SMA) || 0) * 1.1 || 1e8;
+  } else {
+    // Original had no orbit (was a centre body) — give it a default orbit around the centre
+    const centre = Object.keys(bodies).find(k => bodies[k].isCenter);
+    newData.ORBIT_DATA = { parent: centre || 'Sun', SMA: 1e8, E: 0, direction: 1 };
+  }
+  bodies[newName] = { preset: _bodyClipboard.preset, data: newData };
   if(typeof drawViewport === 'function') drawViewport();
   if(typeof updateStatusBar === 'function') updateStatusBar();
 }
