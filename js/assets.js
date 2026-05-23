@@ -4,93 +4,60 @@ const textureCache  = {};
 const texPixelCache = {};
 let _sfsDbgLogged   = {}; // throttle per-body NODRAW warnings to once per load
 
+// Pending decode queue — process images in batches to avoid overwhelming mobile
+const _decodeQueue = [];
+let   _decodeRunning = false;
+
 function cacheTexture(name, dataUrl){
-  const img = new Image();
-  img.onload = () => {
-    textureCache[name] = img;
-    // ── Fast path: 64×64 strip samples (cheap, done immediately) ───────────
-    try {
-      const c = document.createElement('canvas');
-      c.width = 64; c.height = 64;
-      const x = c.getContext('2d');
-      x.drawImage(img, 0, 0, 64, 64);
-      texPixelCache[name + '_ring']  = x.getImageData(0, 0, 64, 1).data;
-      texPixelCache[name + '_atmos'] = x.getImageData(0, 0, 1, 64).data;
-    } catch(e) { console.warn('[SFS|CACHE] strip sample failed:', e); }
+  _decodeQueue.push({ name, dataUrl });
+  _processDecodeQueue();
+}
 
-    // Notify immediately so the viewport can render (without atmo polar warp yet).
-    drawViewport();
-    if(typeof refreshTexPickerLists === 'function') refreshTexPickerLists();
-    if(typeof _PSC !== 'undefined' && _PSC.open && typeof _pscScheduleDraw === 'function'){
-      _pscScheduleDraw();
-    }
+// Process image decode queue with rate limiting for mobile stability
+async function _processDecodeQueue(){
+  if(_decodeRunning) return;
+  _decodeRunning = true;
 
-    // ── Slow path: 256×256 atmosphere polar warp — deferred off main thread ─
-    // requestIdleCallback fires when the browser is idle so it won't block
-    // loading-screen paint, scrolling, or any other interaction.
-    // Falls back to setTimeout(0) on browsers without rIC (rare).
-    const _doPolarWarp = () => {
-      try {
-        // ── Atmosphere polar canvas ──────────────────────────────────────────
-        // Pre-warp the texture into polar coordinates so drawImage() can paint
-        // it directly onto the atmosphere disc at render time.
-        //
-        // SFS wrapping rules:
-        //   - Texture left  edge (U=0) = rightmost point of planet (East, angle=0)
-        //   - Texture right edge (U=1) = wraps back after 360° counter-clockwise
-        //   - Wrapping is CCW: East→North→West→South→East = left→right of texture
-        //   - Texture bottom row (Y=SH-1) = planet surface (radFrac=0)
-        //   - Texture top    row (Y=0)    = outer atmosphere edge (radFrac=1)
-        //
-        // Canvas atan2: angle=0 → East, increases clockwise (CW).
-        // To get CCW from East: u = 1 - normalised_CW_angle  (flip direction)
-        const SZ = 256;
-        const pc = document.createElement('canvas');
-        pc.width = SZ; pc.height = SZ;
-        const px2 = pc.getContext('2d');
-        const srcC = document.createElement('canvas');
-        srcC.width = img.naturalWidth; srcC.height = img.naturalHeight;
-        const srcX = srcC.getContext('2d');
-        srcX.drawImage(img, 0, 0);
-        const srcD = srcX.getImageData(0, 0, srcC.width, srcC.height).data;
-        const SW = srcC.width, SH = srcC.height;
-        const outD = px2.createImageData(SZ, SZ);
-        const od = outD.data;
-        const halfSZ = SZ / 2;
-        for(let py = 0; py < SZ; py++){
-          for(let ppx = 0; ppx < SZ; ppx++){
-            const dx = ppx - halfSZ, dy = py - halfSZ;
-            const radFrac = Math.sqrt(dx*dx + dy*dy) / halfSZ;
-            const oi = (py*SZ + ppx)*4;
-            if(radFrac > 1.0){
-              od[oi]=od[oi+1]=od[oi+2]=od[oi+3]=0;
-              continue;
-            }
-            let cwAngle = Math.atan2(dy, dx) / (Math.PI*2);
-            if(cwAngle < 0) cwAngle += 1;
-            const u = (1 - cwAngle) % 1;
-            const sx = Math.min(SW-1, Math.max(0, Math.round(u * (SW-1))));
-            const sy = Math.min(SH-1, Math.max(0, Math.round((1 - radFrac) * (SH-1))));
-            const si = (sy * SW + sx) * 4;
-            od[oi]   = srcD[si];
-            od[oi+1] = srcD[si+1];
-            od[oi+2] = srcD[si+2];
-            od[oi+3] = srcD[si+3];
-          }
-        }
-        px2.putImageData(outD, 0, 0);
-        texPixelCache[name + '_atmoCanvas'] = pc;
-        // Re-draw now that the atmosphere canvas is ready
+  while(_decodeQueue.length > 0){
+    const { name, dataUrl } = _decodeQueue.shift();
+    
+    await new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        textureCache[name] = img;
+        // ── Fast path: 64×64 strip samples (cheap, done immediately) ───────────
+        try {
+          const c = document.createElement('canvas');
+          c.width = 64; c.height = 64;
+          const x = c.getContext('2d');
+          x.drawImage(img, 0, 0, 64, 64);
+          texPixelCache[name + '_ring']  = x.getImageData(0, 0, 64, 1).data;
+          texPixelCache[name + '_atmos'] = x.getImageData(0, 0, 1, 64).data;
+        } catch(e) { console.warn('[SFS|CACHE] strip sample failed:', e); }
+
+        // Notify immediately so the viewport can render
         drawViewport();
-      } catch(e) { console.warn('[SFS|CACHE] atmo polar warp failed:', e); }
-    };
-    if(typeof requestIdleCallback === 'function'){
-      requestIdleCallback(_doPolarWarp, { timeout: 2000 });
-    } else {
-      setTimeout(_doPolarWarp, 0);
+        if(typeof refreshTexPickerLists === 'function') refreshTexPickerLists();
+        if(typeof _PSC !== 'undefined' && _PSC.open && typeof _pscScheduleDraw === 'function'){
+          _pscScheduleDraw();
+        }
+        
+        resolve();
+      };
+      img.onerror = () => {
+        console.warn('[SFS|CACHE] failed to decode:', name);
+        resolve(); // Continue processing queue even on error
+      };
+      img.src = dataUrl;
+    });
+    
+    // Yield every 4 textures to let the browser breathe (mobile optimization)
+    if(_decodeQueue.length % 4 === 0){
+      await new Promise(r => setTimeout(r, 0));
     }
-  };
-  img.src = dataUrl;
+  }
+
+  _decodeRunning = false;
 }
 
 // ════════════════════════════════ ASSETS SYSTEM ════════════════════════════════
