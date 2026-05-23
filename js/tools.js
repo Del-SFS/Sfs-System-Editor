@@ -1258,10 +1258,8 @@ let _holdMoved     = false;  // pointer moved too far during hold → cancel
 let _holdFired     = false;  // hold completed and ctx menu opened — suppress next touchend tap
 let _holdStartX    = 0;
 let _holdStartY    = 0;
-const HOLD_MS       = 400;    // hold duration
-const HOLD_MAX_MOVE = 18;     // px — mouse (precise pointer)
-const HOLD_MAX_MOVE_TOUCH = 22; // px — touch (finger naturally drifts more)
-const HOLD_DEAD_MS  = 160;    // ms — ignore movement during initial touch settle
+const HOLD_MS               = 400;   // hold duration (ms)
+const HOLD_MAX_MOVE_TOUCH   = 20;    // px movement cancels hold
 
 function _ctxEl(){ return _ctxMenu || (_ctxMenu = document.getElementById('body-ctx-menu')); }
 
@@ -1318,64 +1316,36 @@ document.addEventListener('pointerdown', e => {
   }
 }, true);
 
-// ── Hold-detect on mouse (desktop) ───────────────────────────────────────
-vp.addEventListener('mousedown', e => {
-  if(e.button !== 0) return;
-  _holdMoved = false;
-  _holdStartX = e.clientX; _holdStartY = e.clientY;
+// ── Hold-detect: single pointer-based implementation (mouse + touch) ─────
+let _holdTouchDeadUntil = 0;
+
+vp.addEventListener('pointerdown', e => {
+  if(e.button !== 0 && e.pointerType === 'mouse') return;
+  _holdMoved  = false;
+  _holdFired  = false;
+  _holdStartX = e.clientX;
+  _holdStartY = e.clientY;
+  clearTimeout(_holdTimer);
   _holdTimer = setTimeout(() => {
     if(_holdMoved) return;
     const hit = _hitBodyAt(e.clientX, e.clientY);
-    if(hit) openBodyCtxMenu(hit, e.clientX, e.clientY);
-    // else: hold fired but missed all bodies — no action, which is correct
-  }, HOLD_MS);
-}, true); // capture so we see it before the regular mousedown
-
-vp.addEventListener('mousemove', e => {
-  if(Math.hypot(e.clientX - _holdStartX, e.clientY - _holdStartY) > HOLD_MAX_MOVE){
-    _holdMoved = true;
-    clearTimeout(_holdTimer);
-  }
-}, true);
-
-vp.addEventListener('mouseup', () => { clearTimeout(_holdTimer); }, true);
-
-// ── Hold-detect on touch (mobile) ────────────────────────────────────────
-// We install on capture so we can inspect touches before the regular handler.
-// _holdTouchDeadUntil: ignore touchmove cancellation during initial finger-settle window
-let _holdTouchDeadUntil = 0;
-
-vp.addEventListener('touchstart', e => {
-  if(e.touches.length !== 1) { clearTimeout(_holdTimer); return; }
-  const t = e.touches[0];
-  _holdMoved = false;
-  _holdFired = false;
-  _holdStartX = t.clientX; _holdStartY = t.clientY;
-  _holdTouchDeadUntil = Date.now() + HOLD_DEAD_MS;
-  _holdTimer = setTimeout(() => {
-    if(_holdMoved) return;
-    const hit = _hitBodyAt(t.clientX, t.clientY);
     if(hit){
-      if(navigator.vibrate) navigator.vibrate(40);
-      _holdFired = true;  // suppress the imminent touchend from selecting the body
-      openBodyCtxMenu(hit, t.clientX, t.clientY);
+      if(e.pointerType === 'touch' && navigator.vibrate) navigator.vibrate(40);
+      _holdFired = true;
+      openBodyCtxMenu(hit, e.clientX, e.clientY);
     }
   }, HOLD_MS);
-}, { capture: true, passive: true });
+});
 
-vp.addEventListener('touchmove', e => {
-  if(e.touches.length !== 1) { clearTimeout(_holdTimer); return; }
-  // Dead-zone: don't cancel during initial finger-settle
-  if(Date.now() < _holdTouchDeadUntil) return;
-  const t = e.touches[0];
-  if(Math.hypot(t.clientX - _holdStartX, t.clientY - _holdStartY) > HOLD_MAX_MOVE_TOUCH){
+vp.addEventListener('pointermove', e => {
+  if(Math.hypot(e.clientX - _holdStartX, e.clientY - _holdStartY) > HOLD_MAX_MOVE_TOUCH){
     _holdMoved = true;
     clearTimeout(_holdTimer);
   }
-}, { capture: true, passive: true });
+});
 
-vp.addEventListener('touchend',    () => clearTimeout(_holdTimer), { capture: true, passive: true });
-vp.addEventListener('touchcancel', () => clearTimeout(_holdTimer), { capture: true, passive: true });
+vp.addEventListener('pointerup',     () => { clearTimeout(_holdTimer); });
+vp.addEventListener('pointercancel', () => { clearTimeout(_holdTimer); _holdFired = false; });
 
 // ── Menu action functions ─────────────────────────────────────────────────
 // ── Clipboard state ───────────────────────────────────────────────────────
