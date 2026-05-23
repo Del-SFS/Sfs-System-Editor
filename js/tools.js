@@ -1288,6 +1288,13 @@ function openBodyCtxMenu(bodyName, clientX, clientY){
   const el = _ctxEl();
   document.getElementById('bctx-title').textContent = bodyName.toUpperCase();
 
+  // Disable Cut and Group Select for the system centre
+  const isCenter = !!(bodies[bodyName]?.isCenter);
+  const cutBtn   = document.getElementById('bctx-cut');
+  const grpBtn   = document.getElementById('bctx-group');
+  if(cutBtn)  cutBtn.classList.toggle('disabled', isCenter);
+  if(grpBtn)  grpBtn.classList.toggle('disabled', isCenter);
+
   // Position: keep inside viewport
   el.style.display = 'block';
   el.style.left = '0'; el.style.top = '0'; // reset for measurement
@@ -1378,6 +1385,7 @@ function bctxCut(){
   const name = _ctxMenuBody;
   closeBodyCtxMenu();
   if(!name || !bodies[name]) return;
+  if(bodies[name].isCenter) return; // cannot cut the system centre
   // Copy data then delete
   _bodyClipboard = { name, data: JSON.parse(JSON.stringify(bodies[name].data)), preset: bodies[name].preset };
   _updatePasteState();
@@ -1434,7 +1442,7 @@ document.addEventListener('keydown', e => {
 
   if(e.key === 'x' || e.key === 'X'){
     const name = _ctxMenuBody || (typeof selectedBody !== 'undefined' ? selectedBody : null);
-    if(name && bodies[name]){
+    if(name && bodies[name] && !bodies[name].isCenter){
       _ctxMenuBody = name;
       e.preventDefault();
       bctxCut();
@@ -1458,7 +1466,7 @@ function bctxGroupSelect(){
   const name = _ctxMenuBody;
   closeBodyCtxMenu();
   if(!name || !bodies[name]) return;
-  // Activate group-select mode, seeding with this body
+  if(bodies[name].isCenter) return; // cannot group-select the system centre
   enterGroupSelect(name);
 }
 
@@ -1531,6 +1539,7 @@ function _gsRebuildPanel(){
 // Toggle a body in/out of group selection (called on tap while in group mode)
 function groupSelToggle(name){
   if(!groupSelectMode) return;
+  if(bodies[name]?.isCenter) return; // centre can never be group-selected
   if(groupSelected.has(name)) groupSelected.delete(name);
   else groupSelected.add(name);
   _gsRebuildPanel();
