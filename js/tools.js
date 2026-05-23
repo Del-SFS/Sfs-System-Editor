@@ -1236,8 +1236,8 @@ let _holdMoved     = false;  // pointer moved too far during hold → cancel
 let _holdFired     = false;  // hold completed and ctx menu opened — suppress next touchend tap
 let _holdStartX    = 0;
 let _holdStartY    = 0;
-const HOLD_MS       = 500;    // hold duration
-const HOLD_MAX_MOVE = 10;     // px — mouse (precise pointer)
+const HOLD_MS       = 400;    // hold duration
+const HOLD_MAX_MOVE = 18;     // px — mouse (precise pointer)
 const HOLD_MAX_MOVE_TOUCH = 22; // px — touch (finger naturally drifts more)
 const HOLD_DEAD_MS  = 160;    // ms — ignore movement during initial touch settle
 
@@ -1249,8 +1249,8 @@ function _hitBodyAt(clientX, clientY){
   const sc2 = getSMAScale();
   const hits = [];
   Object.entries(bodyScreenPos).forEach(([name, sp]) => {
-    if(!bodyVisibleMap[name]) return;
     const b = bodies[name];
+    if(!b) return;
     const br = (b.data.BASE_DATA||{}).radius || 1;
     const iconR = (b.isCenter?18 : b.preset==='star'?14 : (b.preset==='gasgiant'||b.preset==='ringedgiant')?10 :
                   (b.preset==='planet'||b.preset==='marslike'||b.preset==='mercurylike')?7 : b.preset==='moon'?5:4) * iconScale;
@@ -1304,6 +1304,7 @@ vp.addEventListener('mousedown', e => {
     if(_holdMoved) return;
     const hit = _hitBodyAt(e.clientX, e.clientY);
     if(hit) openBodyCtxMenu(hit, e.clientX, e.clientY);
+    // else: hold fired but missed all bodies — no action, which is correct
   }, HOLD_MS);
 }, true); // capture so we see it before the regular mousedown
 

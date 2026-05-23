@@ -2905,6 +2905,11 @@ body {
    IMAGE OVERLAY PANEL
    ══════════════════════════════════════════════════════ */
 
+#img-panel {
+  transform: translateX(100%);
+  transition: transform .28s cubic-bezier(.4,0,.2,1);
+}
+
 #img-panel.open {
   transform: translateX(0);
 }
