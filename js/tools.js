@@ -553,23 +553,36 @@ vp.addEventListener('touchstart', e => {
   if(ids.length === 2){
     const t0 = _touches[ids[0]], t1 = _touches[ids[1]];
     const dist = Math.hypot(t1.x - t0.x, t1.y - t0.y);
-    _pinchStartDist = dist;
-    _lastPinchDist  = dist;
-    _pinchStartZ    = vpZ;
-    _pinchMidX = (t0.x + t1.x) / 2;
-    _pinchMidY = (t0.y + t1.y) / 2;
-    _wasPinching = true;
-    _pinchMoved  = false; // reset — will be set true on first actual movement
-    // Group-select: start SMA pinch snapshot
-    _gsPinchStart(dist);
+    // Check if both fingers land on the same image — if so, hand off to image pinch
+    const rect2 = vp.getBoundingClientRect();
+    const _imgPinchConsumed = typeof imgPinchStart === 'function'
+      && imgPinchStart(t0.x - rect2.left, t0.y - rect2.top, t1.x - rect2.left, t1.y - rect2.top);
+    if(!_imgPinchConsumed) {
+      // Normal viewport pinch-zoom
+      _pinchStartDist = dist;
+      _lastPinchDist  = dist;
+      _pinchStartZ    = vpZ;
+      _pinchMidX = (t0.x + t1.x) / 2;
+      _pinchMidY = (t0.y + t1.y) / 2;
+      _wasPinching = true;
+      _pinchMoved  = false;
+      _gsPinchStart(dist);
+    } else {
+      // Image pinch active — suppress viewport pinch
+      _pinchStartDist = null;
+      _lastPinchDist  = null;
+      _wasPinching = true;
+      _pinchMoved  = false;
+    }
   }
   if(ids.length === 1){
     dragSX = e.touches[0].clientX; dragSY = e.touches[0].clientY;
-    // Image overlay touch — consume if it hits an image
+    // Image overlay touch — consume if it hits an image; suppress viewport pan if so
     const _t0 = e.touches[0];
     const _rect1 = vp.getBoundingClientRect();
     if(typeof imgMouseDown === 'function'){
-      imgMouseDown(_t0.clientX - _rect1.left, _t0.clientY - _rect1.top, _t0.clientX, _t0.clientY);
+      const _imgConsumed = imgMouseDown(_t0.clientX - _rect1.left, _t0.clientY - _rect1.top, _t0.clientX, _t0.clientY);
+      if(_imgConsumed) { _imgConsumedDown = true; }
     }
   }
 }, {passive: false});
@@ -579,9 +592,18 @@ vp.addEventListener('touchmove', e => {
   Array.from(e.changedTouches).forEach(t => { _touches[t.identifier] = {x: t.clientX, y: t.clientY}; });
   const ids = Object.keys(_touches);
 
-  if(ids.length === 2 && _pinchStartDist && _lastPinchDist){
+  if(ids.length === 2 && _lastPinchDist){
     const t0 = _touches[ids[0]], t1 = _touches[ids[1]];
     const dist = Math.hypot(t1.x - t0.x, t1.y - t0.y);
+
+    // If an image pinch is active, route to it instead of viewport zoom
+    if(typeof imgPinchMove === 'function') {
+      const rect2 = vp.getBoundingClientRect();
+      if(imgPinchMove(t0.x - rect2.left, t0.y - rect2.top, t1.x - rect2.left, t1.y - rect2.top)){
+        _pinchMoved = true;
+        return;
+      }
+    }
 
     // Guard: skip frame if dist is degenerate (fingers overlapping during lag)
     if(dist > 1){

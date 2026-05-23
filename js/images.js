@@ -101,9 +101,18 @@ function imgDrawOverlays(ctx, vpZ_, vpOffX_, vpOffY_, vpW, vpH) {
     // When first locked (image already placed), offset preserves visual position.
     // The centre of the image = body + offset + (w/2, h/2)
     let wx = ov.worldX, wy = ov.worldY;
-    if(ov.lockToBody && ov.lockToBody !== 'None' && typeof bodyWorldPos !== 'undefined') {
-      const bp = bodyWorldPos[ov.lockToBody];
-      if(bp) { wx = bp.x + ov._lockOffX; wy = bp.y + ov._lockOffY; }
+    if(ov.lockToBody && ov.lockToBody !== 'None') {
+      if(typeof bodyWorldPos === 'undefined'){
+        console.warn('[IMG] bodyWorldPos is undefined!');
+      } else {
+        const bp = bodyWorldPos[ov.lockToBody];
+        if(bp) {
+          wx = bp.x + ov._lockOffX;
+          wy = bp.y + ov._lockOffY;
+        } else {
+          console.warn('[IMG] Body not found in bodyWorldPos:', ov.lockToBody, 'Available:', Object.keys(bodyWorldPos));
+        }
+      }
     }
 
     const sx = (wx + vpOffX_) * vpZ_ + vpW / 2;
@@ -201,18 +210,80 @@ function _imgHandleAt(sx, sy) {
   const ly = sin * dx + cos * dy;
 
   // Rotation handle
-  if(Math.hypot(lx, ly - (-sh / 2 - Math.min(18, 18 / vpZ_))) < Math.min(10, 10 / vpZ_) + 6) return 'rotate';
+  if(Math.hypot(lx, ly - (-sh / 2 - Math.min(18, 18 / vpZ))) < Math.min(10, 10 / vpZ) + 6) return 'rotate';
   // Corner handles — return index (0=TL,1=TR,2=BL,3=BR)
   const corners = _imgHandleCorners(sw, sh);
   for(let i = 0; i < corners.length; i++) {
     const [hx, hy] = corners[i];
-    if(Math.hypot(lx - hx, ly - hy) < Math.min(10, 10 / vpZ_) + 6) return i;
+    if(Math.hypot(lx - hx, ly - hy) < Math.min(10, 10 / vpZ) + 6) return i;
   }
   return null;
 }
 
 // ── Interaction state ─────────────────────────────────────────────────────────
 let _imgDrag    = null; // { type:'move'|'corner'|'rotate', ovId, startX, startY, startWX, startWY, startW, startH, startRot, cornerIdx }
+let _imgPinch   = null; // { ovId, startDist, startW, startH, startWX, startWY, startMidClientX, startMidClientY }
+
+// ── Touch pinch: begin (call when 2 fingers down and both hit the same image) ─
+// Returns true if consumed (both fingers on a non-clickThrough image).
+function imgPinchStart(t0x, t0y, t1x, t1y) {
+  // Both touch points must hit the same non-clickThrough image
+  const id0 = imgHitTest(t0x, t0y);
+  const id1 = imgHitTest(t1x, t1y);
+  if(id0 === null || id0 !== id1) return false;
+  const ov = _imgOverlays.find(o => o.id === id0);
+  if(!ov) return false;
+  _imgSelectOverlay(id0);
+  const dist = Math.hypot(t1x - t0x, t1y - t0y);
+  _imgPinch = {
+    ovId: id0,
+    startDist: dist,
+    startW: ov.worldW,
+    startH: ov.worldH,
+    startWX: ov.worldX,
+    startWY: ov.worldY,
+    aspect: ov.worldH / ov.worldW,
+    startMidClientX: (t0x + t1x) / 2,
+    startMidClientY: (t0y + t1y) / 2,
+  };
+  _imgDrag = null; // cancel any single-finger drag
+  return true;
+}
+
+// Returns true if a pinch is active (caller should skip viewport zoom).
+function imgPinchMove(t0x, t0y, t1x, t1y) {
+  if(!_imgPinch) return false;
+  const ov = _imgOverlays.find(o => o.id === _imgPinch.ovId);
+  if(!ov) { _imgPinch = null; return false; }
+  const dist = Math.hypot(t1x - t0x, t1y - t0y);
+  const scale = dist / _imgPinch.startDist;
+  const newW = Math.max(20 / vpZ, _imgPinch.startW * scale);
+  const newH = _imgAspectLocked ? newW * _imgPinch.aspect
+                                : Math.max(20 / vpZ, _imgPinch.startH * scale);
+  // Keep centre of image pinned to the start midpoint in world coords
+  const rect = vp.getBoundingClientRect();
+  const midSx = _imgPinch.startMidClientX - rect.left;
+  const midSy = _imgPinch.startMidClientY - rect.top;
+  const midWx = (midSx - vp.width  / 2) / vpZ - vpOffX;
+  const midWy = (midSy - vp.height / 2) / vpZ - vpOffY;
+  ov.worldW = newW;
+  ov.worldH = newH;
+  // Place top-left so centre stays at midWx/midWy
+  if(ov.lockToBody && ov.lockToBody !== 'None') {
+    const bp = typeof bodyWorldPos !== 'undefined' ? bodyWorldPos[ov.lockToBody] : null;
+    if(bp) { ov._lockOffX = midWx - bp.x - newW / 2; ov._lockOffY = midWy - bp.y - newH / 2; }
+  } else {
+    ov.worldX = midWx - newW / 2;
+    ov.worldY = midWy - newH / 2;
+  }
+  _imgUpdateSidebar();
+  drawViewport();
+  return true;
+}
+
+function imgPinchEnd() {
+  _imgPinch = null;
+}
 
 function _imgSelectOverlay(id) {
   _imgSelected = id;
@@ -312,7 +383,8 @@ function imgMouseMove(clientX, clientY) {
 }
 
 function imgMouseUp() {
-  _imgDrag = null;
+  _imgDrag  = null;
+  _imgPinch = null;
 }
 
 // ── Sidebar panel ─────────────────────────────────────────────────────────────
@@ -353,7 +425,8 @@ function _imgUpdateSidebar() {
   // Lock-to-body dropdown
   const sel = document.getElementById('img-d-lock');
   if(sel) {
-    const names = ['None', ...Object.keys(typeof bodies !== 'undefined' ? bodies : {})].sort();
+    const bodyNames = (typeof bodies !== 'undefined' && bodies) ? Object.keys(bodies) : [];
+    const names = ['None', ...bodyNames].sort();
     sel.innerHTML = names.map(n => `<option value="${n}"${ov.lockToBody===n?' selected':''}>${n}</option>`).join('');
   }
 }
@@ -388,17 +461,23 @@ function imgFieldChange(field, value) {
   if(field === 'lock') {
     const prev = ov.lockToBody;
     ov.lockToBody = value;
+    console.log('[IMG] Lock changed:', prev, '→', value);
     if(value !== 'None' && prev === 'None') {
       const bp = typeof bodyWorldPos !== 'undefined' ? bodyWorldPos[value] : null;
+      console.log('[IMG] Locking to body:', value, 'bodyWorldPos:', bp, 'current pos:', ov.worldX, ov.worldY);
       if(bp) {
         // Store offset of image top-left from body centre
         // so the image stays exactly where it is visually
         ov._lockOffX = ov.worldX - bp.x;
         ov._lockOffY = ov.worldY - bp.y;
+        console.log('[IMG] Lock offsets set:', ov._lockOffX, ov._lockOffY);
+      } else {
+        console.warn('[IMG] Body not found in bodyWorldPos!', 'Available:', typeof bodyWorldPos !== 'undefined' ? Object.keys(bodyWorldPos) : 'undefined');
       }
     } else if(value === 'None' && prev !== 'None') {
       const { wx, wy } = _imgWorldXY(ov);
       ov.worldX = wx; ov.worldY = wy;
+      console.log('[IMG] Unlocked, world pos:', wx, wy);
     }
   }
   _imgUpdateSidebar();
