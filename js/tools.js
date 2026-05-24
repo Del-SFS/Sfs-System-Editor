@@ -982,150 +982,33 @@ function _pscDrawBody(ctx, b, name, cx, cy, displayR, r_m){
   const mb = Math.round((mc.b||0.7)*255);
   const baseColor = `rgb(${mr},${mg},${mb})`;
 
-  // Correct texture key path
-  const TTD        = d.TERRAIN_DATA?.TERRAIN_TEXTURE_DATA;
-  const ptex       = TTD?.planetTexture;
-  const surfTexA   = TTD?.surfaceTexture_A;
-  const hasTerrain = !!d.TERRAIN_DATA;
-  const hasAtmo    = !!(d.ATMOSPHERE_PHYSICS_DATA && d.ATMOSPHERE_VISUALS_DATA?.GRADIENT);
-  const hasClouds  = !!(d.ATMOSPHERE_VISUALS_DATA?.CLOUDS?.texture &&
-                        d.ATMOSPHERE_VISUALS_DATA.CLOUDS.texture !== 'None');
-  const hasFCloud  = !!(d.FRONT_CLOUDS_DATA?.cloudsTexture &&
-                        d.FRONT_CLOUDS_DATA.cloudsTexture !== 'None');
-  const hasFog     = !!(d.ATMOSPHERE_VISUALS_DATA?.FOG?.keys?.length);
-
-  const isStar = b.preset === 'star';
-  const isBH   = b.preset === 'blackhole';
-
   ctx.save();
 
-  // ── Atmosphere halo (behind body) ────────────────────────────────────────
-  if(hasAtmo && !isStar){
-    const GRD = d.ATMOSPHERE_VISUALS_DATA.GRADIENT;
-    const atmoH = (d.ATMOSPHERE_PHYSICS_DATA.height || 0);
-    const atmoRatio = atmoH > 0 ? Math.min(1 + atmoH / Math.max(r_m,1), 2.5) : 1.15;
-    const atmoR = displayR * atmoRatio;
-    const atmoTex = GRD.texture;
-    const apx = atmoTex && atmoTex !== 'None' && texPixelCache[atmoTex+'_atmos'];
+  // ── Lighted circle: base color fill + rim shadow for spherical lighting ──
+  ctx.beginPath();
+  ctx.arc(cx, cy, Math.max(displayR, 1.5), 0, Math.PI*2);
+  ctx.fillStyle = baseColor;
+  ctx.fill();
 
-    if(apx){
-      // Sample the atmo texture column for a radial gradient approximation
-      const grad = ctx.createRadialGradient(cx,cy,displayR*0.9,cx,cy,atmoR);
-      // Row 63 = surface (inner), Row 0 = outer edge
-      const inner = [apx[63*4],apx[63*4+1],apx[63*4+2],apx[63*4+3]/255];
-      const mid   = [apx[32*4],apx[32*4+1],apx[32*4+2],apx[32*4+3]/255];
-      const outer = [apx[4],apx[5],apx[6],apx[7]/255];
-      grad.addColorStop(0,   `rgba(${inner[0]},${inner[1]},${inner[2]},${(inner[3]*0.7).toFixed(2)})`);
-      grad.addColorStop(0.4, `rgba(${mid[0]},${mid[1]},${mid[2]},${(mid[3]*0.5).toFixed(2)})`);
-      grad.addColorStop(1,   `rgba(${outer[0]},${outer[1]},${outer[2]},0)`);
-      ctx.beginPath(); ctx.arc(cx,cy,atmoR,0,Math.PI*2);
-      ctx.fillStyle = grad; ctx.fill();
-    } else {
-      // Fallback: soft coloured halo
-      const grad = ctx.createRadialGradient(cx,cy,displayR*0.85,cx,cy,displayR*1.5);
-      grad.addColorStop(0,'rgba(100,170,255,.25)'); grad.addColorStop(1,'rgba(60,120,220,0)');
-      ctx.beginPath(); ctx.arc(cx,cy,displayR*1.5,0,Math.PI*2);
-      ctx.fillStyle=grad; ctx.fill();
-    }
-  }
+  // Rim shadow to simulate lighting
+  const rim = ctx.createRadialGradient(cx, cy, displayR*0.55, cx, cy, displayR);
+  rim.addColorStop(0, 'rgba(0,0,0,0)');
+  rim.addColorStop(1, 'rgba(0,0,0,.60)');
+  ctx.beginPath();
+  ctx.arc(cx, cy, displayR, 0, Math.PI*2);
+  ctx.fillStyle = rim;
+  ctx.fill();
 
-  // ── Fog glow (tint over planet edge) ─────────────────────────────────────
-  if(hasFog){
-    const fogKeys = d.ATMOSPHERE_VISUALS_DATA.FOG.keys;
-    if(fogKeys.length){
-      const fk = fogKeys[0];
-      const fc = fk.color || {r:200,g:200,b:255,a:0.3};
-      const grad = ctx.createRadialGradient(cx,cy,displayR*0.6,cx,cy,displayR*1.1);
-      grad.addColorStop(0,`rgba(${fc.r|0},${fc.g|0},${fc.b|0},0)`);
-      grad.addColorStop(1,`rgba(${fc.r|0},${fc.g|0},${fc.b|0},${Math.min((fc.a||0.3)*0.6,0.5)})`);
-      ctx.beginPath(); ctx.arc(cx,cy,displayR*1.1,0,Math.PI*2);
-      ctx.fillStyle=grad; ctx.fill();
-    }
-  }
-
-  // ── Planet disc ───────────────────────────────────────────────────────────
-  // Layer order: baseColor → surface texture → rim shadow → clouds → specular
-
-  // Step 1: always paint baseColor as the foundation
-  ctx.beginPath(); ctx.arc(cx, cy, Math.max(displayR, 1.5), 0, Math.PI*2);
-  if(isStar){
-    const sg = ctx.createRadialGradient(cx-displayR*0.25, cy-displayR*0.25, 0, cx, cy, displayR);
-    sg.addColorStop(0, 'rgba(255,255,240,1)');
-    sg.addColorStop(0.4, baseColor);
-    sg.addColorStop(1, `rgb(${Math.min(mr*1.5,255)|0},${mg|0},0)`);
-    ctx.fillStyle = sg;
-    ctx.fill();
-  } else if(isBH){
-    ctx.fillStyle = '#000';
-    ctx.fill();
-  } else {
-    ctx.fillStyle = baseColor;
-    ctx.fill();
-
-    // Step 2: surface texture — try planetTexture first, then surfaceTexture_A
-    if(hasTerrain && displayR > 4){
-      const texName = (ptex && ptex !== 'None') ? ptex
-                    : (surfTexA && surfTexA !== 'None') ? surfTexA
-                    : null;
-      const texImg = texName && textureCache[texName]?.complete
-                     && textureCache[texName].naturalWidth > 0
-                     ? textureCache[texName] : null;
-      if(texImg){
-        ctx.save();
-        ctx.beginPath(); ctx.arc(cx, cy, displayR, 0, Math.PI*2); ctx.clip();
-        ctx.drawImage(texImg, cx-displayR, cy-displayR, displayR*2, displayR*2);
-        ctx.restore();
-      }
-    }
-
-    // Step 3: rim shadow
-    const rim = ctx.createRadialGradient(cx, cy, displayR*0.55, cx, cy, displayR);
-    rim.addColorStop(0, 'rgba(0,0,0,0)');
-    rim.addColorStop(1, 'rgba(0,0,0,.60)');
-    ctx.beginPath(); ctx.arc(cx, cy, displayR, 0, Math.PI*2);
-    ctx.fillStyle = rim; ctx.fill();
-
-    // Step 4: cloud overlay
-    if((hasClouds || hasFCloud) && displayR > 5){
-      const cTex = hasClouds ? d.ATMOSPHERE_VISUALS_DATA.CLOUDS.texture
-                             : d.FRONT_CLOUDS_DATA.cloudsTexture;
-      const cImg = cTex && cTex !== 'None' && textureCache[cTex]?.complete &&
-                   textureCache[cTex].naturalWidth > 0 ? textureCache[cTex] : null;
-      if(cImg){
-        ctx.save();
-        ctx.beginPath(); ctx.arc(cx, cy, displayR, 0, Math.PI*2); ctx.clip();
-        ctx.globalAlpha = 0.55;
-        ctx.drawImage(cImg, cx-displayR, cy-displayR, displayR*2, displayR*2);
-        ctx.restore();
-      }
-    }
-  }
-
-  // Step 5: specular highlight
-  if(!isBH && displayR > 3){
+  // Specular highlight for extra depth
+  if(displayR > 3){
     const hl = ctx.createRadialGradient(cx-displayR*0.3, cy-displayR*0.3, 0, cx, cy, displayR);
     hl.addColorStop(0, 'rgba(255,255,255,.18)');
     hl.addColorStop(0.5, 'rgba(255,255,255,.04)');
     hl.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.beginPath(); ctx.arc(cx, cy, displayR, 0, Math.PI*2);
-    ctx.fillStyle = hl; ctx.fill();
-  }
-
-  // ── Star glow corona ──────────────────────────────────────────────────────
-  if(isStar && displayR > 2){
-    const sg2 = ctx.createRadialGradient(cx,cy,displayR,cx,cy,displayR*1.8);
-    sg2.addColorStop(0,`rgba(${mr},${mg},${mb},.35)`);
-    sg2.addColorStop(1,'rgba(255,160,40,0)');
-    ctx.beginPath(); ctx.arc(cx,cy,displayR*1.8,0,Math.PI*2);
-    ctx.fillStyle=sg2; ctx.fill();
-  }
-
-  // ── Black hole accretion disc ─────────────────────────────────────────────
-  if(isBH && displayR > 3){
-    const ag = ctx.createRadialGradient(cx,cy,displayR*0.9,cx,cy,displayR*1.6);
-    ag.addColorStop(0,'rgba(255,120,30,.6)'); ag.addColorStop(0.5,'rgba(255,60,0,.25)'); ag.addColorStop(1,'rgba(255,20,0,0)');
-    ctx.beginPath(); ctx.arc(cx,cy,displayR*1.6,0,Math.PI*2);
-    ctx.fillStyle=ag; ctx.fill();
+    ctx.beginPath();
+    ctx.arc(cx, cy, displayR, 0, Math.PI*2);
+    ctx.fillStyle = hl;
+    ctx.fill();
   }
 
   ctx.restore();
