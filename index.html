@@ -2959,11 +2959,11 @@ astGenerate = function() { _astOrigGenerate(); astUpdateApplyPreview(); };
         border:1px solid rgba(255,180,80,.5);background:rgba(255,180,80,.18);color:#ffb850">
         ALL BODIES
       </button>
-      <button id="psc-btn-two" onclick="_pscSetMode('two')"
+      <button id="psc-btn-sel" onclick="_pscSetMode('select')"
         style="font-family:'JetBrains Mono',monospace;font-size:.55rem;padding:4px 10px;
         border-radius:3px;cursor:pointer;letter-spacing:.06em;
         border:1px solid rgba(255,180,80,.2);background:none;color:rgba(255,180,80,.45)">
-        COMPARE TWO
+        SELECT BODIES
       </button>
     </div>
 
@@ -2972,20 +2972,25 @@ astGenerate = function() { _astOrigGenerate(); astUpdateApplyPreview(); };
       color:rgba(255,100,100,.7);font-size:.75rem;padding:3px 8px;cursor:pointer">✕</button>
   </div>
 
-  <!-- Two-body selectors (hidden in 'all' mode) -->
-  <div id="psc-two-row" style="display:none;width:min(96vw,960px);gap:8px;
+  <!-- Multi-body selector (hidden in 'all' mode) -->
+  <div id="psc-sel-row" style="display:none;width:min(96vw,960px);
     padding:8px 12px;background:rgba(6,10,22,.97);border-left:1px solid rgba(255,180,80,.22);
-    border-right:1px solid rgba(255,180,80,.22);align-items:center;flex-shrink:0;flex-wrap:wrap">
-    <span style="font-family:'JetBrains Mono',monospace;font-size:.58rem;color:rgba(255,180,80,.6);letter-spacing:.07em">BODY A</span>
-    <select id="psc-sel-a" onchange="_pscOnSelChange()"
-      style="flex:1;min-width:120px;font-family:'JetBrains Mono',monospace;font-size:.6rem;
-      background:rgba(10,18,38,.95);color:rgba(180,210,255,.9);border:1px solid rgba(80,140,255,.3);
-      border-radius:3px;padding:4px 8px;cursor:pointer"></select>
-    <span style="font-family:'JetBrains Mono',monospace;font-size:.58rem;color:rgba(255,180,80,.6);letter-spacing:.07em">BODY B</span>
-    <select id="psc-sel-b" onchange="_pscOnSelChange()"
-      style="flex:1;min-width:120px;font-family:'JetBrains Mono',monospace;font-size:.6rem;
-      background:rgba(10,18,38,.95);color:rgba(180,210,255,.9);border:1px solid rgba(80,140,255,.3);
-      border-radius:3px;padding:4px 8px;cursor:pointer"></select>
+    border-right:1px solid rgba(255,180,80,.22);flex-shrink:0;box-sizing:border-box">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <span style="font-family:'JetBrains Mono',monospace;font-size:.55rem;color:rgba(255,180,80,.6);letter-spacing:.07em">
+        SELECT BODIES TO COMPARE
+      </span>
+      <button onclick="_pscSelAll(true)" style="font-family:'JetBrains Mono',monospace;font-size:.48rem;
+        padding:2px 7px;border-radius:2px;cursor:pointer;border:1px solid rgba(80,140,255,.3);
+        background:none;color:rgba(120,170,255,.7)">ALL</button>
+      <button onclick="_pscSelAll(false)" style="font-family:'JetBrains Mono',monospace;font-size:.48rem;
+        padding:2px 7px;border-radius:2px;cursor:pointer;border:1px solid rgba(255,80,80,.2);
+        background:none;color:rgba(255,120,120,.55)">NONE</button>
+      <span id="psc-sel-count" style="margin-left:auto;font-family:'JetBrains Mono',monospace;
+        font-size:.5rem;color:rgba(150,160,200,.5)"></span>
+    </div>
+    <div id="psc-checklist" style="display:flex;flex-wrap:wrap;gap:5px 8px;max-height:96px;overflow-y:auto;
+      padding-right:4px"></div>
   </div>
 
   <!-- Canvas area -->
@@ -3023,20 +3028,67 @@ astGenerate = function() { _astOrigGenerate(); astUpdateApplyPreview(); };
 
 function _pscSetMode(m){
   _PSC.mode = m;
-  document.getElementById('psc-two-row').style.display = m === 'two' ? 'flex' : 'none';
+  const selRow = document.getElementById('psc-sel-row');
+  selRow.style.display = m === 'select' ? 'block' : 'none';
   // Toggle button styles
   const bAll = document.getElementById('psc-btn-all');
-  const bTwo = document.getElementById('psc-btn-two');
-  if(m === 'all'){
-    bAll.style.background='rgba(255,180,80,.18)'; bAll.style.color='#ffb850'; bAll.style.borderColor='rgba(255,180,80,.5)';
-    bTwo.style.background='none'; bTwo.style.color='rgba(255,180,80,.45)'; bTwo.style.borderColor='rgba(255,180,80,.2)';
-  } else {
-    bTwo.style.background='rgba(255,180,80,.18)'; bTwo.style.color='#ffb850'; bTwo.style.borderColor='rgba(255,180,80,.5)';
-    bAll.style.background='none'; bAll.style.color='rgba(255,180,80,.45)'; bAll.style.borderColor='rgba(255,180,80,.2)';
-  }
+  const bSel = document.getElementById('psc-btn-sel');
+  const activeStyle = ['rgba(255,180,80,.18)', '#ffb850', 'rgba(255,180,80,.5)'];
+  const inactiveStyle = ['none', 'rgba(255,180,80,.45)', 'rgba(255,180,80,.2)'];
+  [bAll, bSel].forEach((b, i) => {
+    const active = (i === 0 && m === 'all') || (i === 1 && m === 'select');
+    const s = active ? activeStyle : inactiveStyle;
+    b.style.background = s[0]; b.style.color = s[1]; b.style.borderColor = s[2];
+  });
   _PSC.zoom=1; _PSC.panX=0; _PSC.panY=0;
-  if(m === 'two') _pscPopulateSelects();
+  if(m === 'select') _pscBuildChecklist();
   _pscScheduleDraw();
+}
+
+function _pscBuildChecklist(){
+  const list = document.getElementById('psc-checklist');
+  if(!list) return;
+  list.innerHTML = '';
+  const names = Object.keys(bodies).sort();
+  // Default: first two selected if nothing chosen yet
+  if(!_PSC.selected || _PSC.selected.size === 0){
+    _PSC.selected = new Set(names.slice(0, Math.min(2, names.length)));
+  }
+  names.forEach(n => {
+    const checked = _PSC.selected.has(n);
+    const chip = document.createElement('label');
+    chip.style.cssText = `display:inline-flex;align-items:center;gap:4px;cursor:pointer;
+      font-family:'JetBrains Mono',monospace;font-size:.55rem;letter-spacing:.04em;
+      padding:3px 8px;border-radius:3px;border:1px solid ${checked ? 'rgba(255,180,80,.45)' : 'rgba(80,100,150,.3)'};
+      background:${checked ? 'rgba(255,180,80,.1)' : 'none'};color:${checked ? '#ffb850' : 'rgba(150,165,210,.6)'};
+      transition:all .12s;user-select:none`;
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.checked = checked; cb.style.display = 'none';
+    cb.onchange = () => {
+      if(cb.checked) _PSC.selected.add(n); else _PSC.selected.delete(n);
+      chip.style.border = cb.checked ? '1px solid rgba(255,180,80,.45)' : '1px solid rgba(80,100,150,.3)';
+      chip.style.background = cb.checked ? 'rgba(255,180,80,.1)' : 'none';
+      chip.style.color = cb.checked ? '#ffb850' : 'rgba(150,165,210,.6)';
+      _pscUpdateCount();
+      _pscScheduleDraw();
+    };
+    chip.appendChild(cb);
+    chip.appendChild(document.createTextNode(n));
+    chip.onclick = () => { cb.checked = !cb.checked; cb.onchange(); };
+    list.appendChild(chip);
+  });
+  _pscUpdateCount();
+}
+
+function _pscSelAll(on){
+  _PSC.selected = on ? new Set(Object.keys(bodies)) : new Set();
+  _pscBuildChecklist();
+  _pscScheduleDraw();
+}
+
+function _pscUpdateCount(){
+  const el = document.getElementById('psc-sel-count');
+  if(el) el.textContent = `${(_PSC.selected||new Set()).size} selected`;
 }
 
 // Close on backdrop click
@@ -3111,9 +3163,16 @@ document.addEventListener('keydown', function(e){
     <span><span style="display:block;color:var(--sky2)">IMAGE OVERLAY</span>
     <span style="display:block;font-size:.54rem;color:rgba(150,150,180,.6);margin-top:1px">Place reference images on the viewport</span></span>
   </button>
+  <button onclick="openHeightmapTools()" style="display:flex;align-items:center;gap:10px;
+    width:100%;padding:9px 14px;background:none;border:none;cursor:pointer;
+    font-family:'JetBrains Mono',monospace;font-size:.62rem;color:rgba(220,220,255,.85);
+    letter-spacing:.05em;transition:background .12s;text-align:left"
+    onmouseover="this.style.background='var(--ac12)'" onmouseout="this.style.background='none'">
+    <span style="font-size:1rem">🗺️</span>
+    <span><span style="display:block;color:var(--sky2)">HEIGHTMAP TOOLS</span>
+    <span style="display:block;font-size:.54rem;color:rgba(150,150,180,.6);margin-top:1px">Bump map → heightmap converter &amp; more</span></span>
+  </button>
 </div>
-
-<!-- hidden file input for image import -->
 <input type="file" id="img-file-input" accept="image/*" multiple style="display:none">
 
 <!-- ══════════════ IMAGE OVERLAY PANEL ══════════════ -->
@@ -3825,6 +3884,160 @@ document.addEventListener('keydown', function(e){
   <div class="bctx-divider"></div>
   <button class="bctx-btn bctx-group" id="bctx-group" onclick="bctxGroupSelect()">◉ Group Select</button>
 </div>
+
+<!-- ══════════════ HEIGHTMAP TOOLS MODAL ══════════════ -->
+<div id="hmt-modal" style="display:none;position:fixed;inset:0;z-index:210000;
+  background:rgba(2,5,14,.92);backdrop-filter:blur(4px);
+  flex-direction:column;align-items:center;justify-content:flex-start;
+  overflow-y:auto;padding:12px 0 24px;box-sizing:border-box">
+
+  <!-- Header -->
+  <div style="width:min(96vw,980px);display:flex;align-items:center;gap:10px;
+    padding:10px 14px;background:rgba(6,10,22,.97);
+    border:1px solid rgba(100,220,180,.2);border-bottom:none;
+    border-radius:6px 6px 0 0;flex-shrink:0;margin-top:auto">
+    <span style="font-family:'Orbitron',sans-serif;font-size:.65rem;color:rgba(100,220,180,.9);letter-spacing:.14em;flex:1">🗺️ HEIGHTMAP TOOLS</span>
+    <button onclick="closeHeightmapTools()" style="background:none;border:1px solid rgba(255,80,80,.3);border-radius:3px;color:rgba(255,100,100,.7);font-size:.75rem;padding:3px 8px;cursor:pointer">✕</button>
+  </div>
+
+  <!-- Tool tabs -->
+  <div style="width:min(96vw,980px);background:rgba(6,10,22,.97);
+    border:1px solid rgba(100,220,180,.2);border-top:1px solid rgba(100,220,180,.1);
+    border-bottom:none;display:flex;gap:0;flex-shrink:0">
+    <button id="hmt-tab-bmp" onclick="hmtSetTab('bumpmap')"
+      style="font-family:'JetBrains Mono',monospace;font-size:.55rem;padding:8px 16px;
+      background:rgba(100,220,180,.12);color:rgba(100,220,180,.9);
+      border:none;border-right:1px solid rgba(100,220,180,.15);cursor:pointer;letter-spacing:.06em">
+      🌄 BUMP MAP → HEIGHTMAP
+    </button>
+    <!-- Future tools will be added here as more tabs -->
+  </div>
+
+  <!-- Tool content area -->
+  <div id="hmt-content" style="width:min(96vw,980px);background:rgba(4,8,20,.98);
+    border:1px solid rgba(100,220,180,.2);border-top:none;
+    border-radius:0 0 6px 6px;flex-shrink:0;overflow:hidden">
+
+    <!-- ─── BUMP MAP TOOL ─── -->
+    <div id="hmt-bumpmap" style="display:flex;flex-direction:column;gap:0">
+
+      <!-- Upload zone -->
+      <div id="hmt-dropzone" style="margin:16px;border:2px dashed rgba(100,220,180,.25);
+        border-radius:6px;padding:28px;text-align:center;cursor:pointer;transition:border-color .2s;
+        font-family:'JetBrains Mono',monospace"
+        onclick="document.getElementById('hmt-file-input').click()"
+        ondragover="event.preventDefault();this.style.borderColor='rgba(100,220,180,.7)'"
+        ondragleave="this.style.borderColor='rgba(100,220,180,.25)'"
+        ondrop="event.preventDefault();this.style.borderColor='rgba(100,220,180,.25)';hmtLoadFile(event.dataTransfer.files[0])">
+        <div style="font-size:2rem;margin-bottom:8px">🌄</div>
+        <div style="font-size:.62rem;color:rgba(100,220,180,.8);letter-spacing:.07em">DROP BUMP MAP IMAGE HERE</div>
+        <div style="font-size:.52rem;color:rgba(150,160,200,.5);margin-top:4px">PNG, JPG, WebP — greyscale equirectangular projection</div>
+        <input type="file" id="hmt-file-input" accept="image/*" style="display:none" onchange="hmtLoadFile(this.files[0])">
+      </div>
+
+      <!-- Preview + controls (hidden until image loaded) -->
+      <div id="hmt-loaded" style="display:none;flex-direction:column;gap:0">
+
+        <!-- Image preview canvas -->
+        <div style="position:relative;margin:0 16px 0">
+          <canvas id="hmt-preview" style="width:100%;height:auto;display:block;border-radius:4px;cursor:crosshair"></canvas>
+          <!-- Overlay canvas for the sample line -->
+          <canvas id="hmt-overlay" style="position:absolute;inset:0;width:100%;height:100%;cursor:ns-resize;pointer-events:all"></canvas>
+        </div>
+
+        <!-- Controls -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 20px;padding:14px 16px">
+
+          <!-- Left column -->
+          <div style="display:flex;flex-direction:column;gap:10px">
+
+            <div>
+              <label style="font-family:'JetBrains Mono',monospace;font-size:.55rem;color:rgba(100,220,180,.7);letter-spacing:.07em;display:block;margin-bottom:4px">
+                SAMPLE LATITUDE <span id="hmt-lat-val" style="color:rgba(180,210,255,.8)">0°</span>
+                <span style="color:rgba(150,160,200,.45);font-size:.48rem;margin-left:4px">(drag line on image)</span>
+              </label>
+              <input type="range" id="hmt-lat" min="0" max="100" value="50" step="0.1"
+                style="width:100%;accent-color:#64dcb4" oninput="hmtUpdate()">
+            </div>
+
+            <div>
+              <label style="font-family:'JetBrains Mono',monospace;font-size:.55rem;color:rgba(100,220,180,.7);letter-spacing:.07em;display:block;margin-bottom:4px">
+                LONGITUDE OFFSET <span id="hmt-lon-val" style="color:rgba(180,210,255,.8)">0°</span>
+              </label>
+              <input type="range" id="hmt-lon" min="0" max="100" value="0" step="0.1"
+                style="width:100%;accent-color:#64dcb4" oninput="hmtUpdate()">
+            </div>
+
+            <div>
+              <label style="font-family:'JetBrains Mono',monospace;font-size:.55rem;color:rgba(100,220,180,.7);letter-spacing:.07em;display:block;margin-bottom:4px">
+                SMOOTHING <span id="hmt-smooth-val" style="color:rgba(180,210,255,.8)">0</span>
+              </label>
+              <input type="range" id="hmt-smooth" min="0" max="60" value="0" step="1"
+                style="width:100%;accent-color:#64dcb4" oninput="hmtUpdate()">
+            </div>
+
+          </div>
+
+          <!-- Right column -->
+          <div style="display:flex;flex-direction:column;gap:10px">
+
+            <div>
+              <label style="font-family:'JetBrains Mono',monospace;font-size:.55rem;color:rgba(100,220,180,.7);letter-spacing:.07em;display:block;margin-bottom:4px">
+                HEIGHT SCALE <span id="hmt-scale-val" style="color:rgba(180,210,255,.8)">1.0×</span>
+              </label>
+              <input type="range" id="hmt-scale" min="0.1" max="3" value="1" step="0.05"
+                style="width:100%;accent-color:#64dcb4" oninput="hmtUpdate()">
+            </div>
+
+            <div>
+              <label style="font-family:'JetBrains Mono',monospace;font-size:.55rem;color:rgba(100,220,180,.7);letter-spacing:.07em;display:block;margin-bottom:4px">
+                OUTPUT WIDTH (COLUMNS)
+              </label>
+              <select id="hmt-width" style="width:100%;font-family:'JetBrains Mono',monospace;font-size:.6rem;
+                background:rgba(10,18,38,.95);color:rgba(180,210,255,.9);border:1px solid rgba(80,140,255,.3);
+                border-radius:3px;padding:4px 8px" onchange="hmtUpdate()">
+                <option value="256">256 (small)</option>
+                <option value="512">512 (standard)</option>
+                <option value="1024" selected>1024 (high detail)</option>
+                <option value="2048">2048 (ultra)</option>
+              </select>
+            </div>
+
+            <div style="display:flex;gap:12px;align-items:center">
+              <label style="font-family:'JetBrains Mono',monospace;font-size:.55rem;color:rgba(100,220,180,.7);letter-spacing:.07em;display:flex;align-items:center;gap:6px;cursor:pointer">
+                <input type="checkbox" id="hmt-invert" onchange="hmtUpdate()" style="accent-color:#64dcb4">
+                INVERT (dark=high)
+              </label>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Height profile preview -->
+        <div style="margin:0 16px 14px">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:.52rem;color:rgba(150,160,200,.5);letter-spacing:.06em;margin-bottom:4px">HEIGHT PROFILE PREVIEW</div>
+          <canvas id="hmt-profile" style="width:100%;height:64px;display:block;
+            border:1px solid rgba(100,220,180,.15);border-radius:3px;background:rgba(4,8,20,.9)"></canvas>
+        </div>
+
+        <!-- Output buttons -->
+        <div style="display:flex;gap:8px;padding:0 16px 16px;flex-wrap:wrap">
+          <button onclick="hmtDownloadPNG()" style="font-family:'JetBrains Mono',monospace;font-size:.58rem;
+            padding:8px 18px;border-radius:3px;cursor:pointer;letter-spacing:.06em;
+            border:1px solid rgba(100,220,180,.45);background:rgba(100,220,180,.1);color:rgba(100,220,180,.9)">
+            ⬇ DOWNLOAD HEIGHTMAP PNG
+          </button>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:.5rem;color:rgba(150,160,200,.45);
+            align-self:center;line-height:1.4">
+            RGBA silhouette format · ready to drop into HMAP tab
+          </div>
+        </div>
+
+      </div><!-- #hmt-loaded -->
+    </div><!-- #hmt-bumpmap -->
+
+  </div><!-- #hmt-content -->
+</div><!-- #hmt-modal -->
 
 </body>
 

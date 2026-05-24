@@ -787,7 +787,8 @@ function updateStatusBar(){
 
 const _PSC = {           // namespace object for all comparison-tool state
   open: false,
-  mode: 'all',           // 'all' | 'two'
+  mode: 'all',           // 'all' | 'select'
+  selected: new Set(),   // body names chosen in 'select' mode
   bodyA: null,
   bodyB: null,
   animFrame: null,
@@ -810,6 +811,7 @@ function openPlanetComparison(){
   _PSC.open = true;
   _PSC.zoom = 1; _PSC.panX = 0; _PSC.panY = 0;
   _PSC.mode = 'all';
+  _PSC.selected = new Set();
   _PSC.bodyA = null; _PSC.bodyB = null;
 
   const modal = document.getElementById('psc-modal');
@@ -834,31 +836,9 @@ function closePlanetComparison(){
   if(_PSC.animFrame){ cancelAnimationFrame(_PSC.animFrame); _PSC.animFrame = null; }
 }
 
-// ── Populate the two dropdowns with current body names ────────────────────
-function _pscPopulateSelects(){
-  const names = Object.keys(bodies);
-  ['psc-sel-a','psc-sel-b'].forEach((id,idx) => {
-    const sel = document.getElementById(id);
-    sel.innerHTML = names.map(n=>`<option value="${n}">${n}</option>`).join('');
-    if(names[idx]) sel.value = names[idx];
-  });
-  _PSC.bodyA = document.getElementById('psc-sel-a').value || names[0] || null;
-  _PSC.bodyB = document.getElementById('psc-sel-b').value || names[Math.min(1,names.length-1)] || null;
-}
-
-function _pscOnModeChange(m){
-  _PSC.mode = m;
-  document.getElementById('psc-two-row').style.display = m === 'two' ? 'flex' : 'none';
-  _PSC.zoom=1; _PSC.panX=0; _PSC.panY=0;
-  _pscScheduleDraw();
-}
-
-function _pscOnSelChange(){
-  _PSC.bodyA = document.getElementById('psc-sel-a').value;
-  _PSC.bodyB = document.getElementById('psc-sel-b').value;
-  _PSC.zoom=1; _PSC.panX=0; _PSC.panY=0;
-  _pscScheduleDraw();
-}
+function _pscOnModeChange(m){ _PSC.mode = m; _PSC.zoom=1; _PSC.panX=0; _PSC.panY=0; _pscScheduleDraw(); }
+function _pscOnSelChange(){ _PSC.zoom=1; _PSC.panX=0; _PSC.panY=0; _pscScheduleDraw(); }
+function _pscPopulateSelects(){}
 
 // ── Drawing ───────────────────────────────────────────────────────────────
 function _pscScheduleDraw(){
@@ -879,11 +859,17 @@ function _pscDraw(){
   ctx.fillRect(0,0,W,H);
   _pscStars(ctx,W,H);
 
-  const allNames = _PSC.mode === 'two'
-    ? [_PSC.bodyA, _PSC.bodyB].filter(Boolean)
+  const allNames = _PSC.mode === 'select'
+    ? [..._PSC.selected].filter(n => bodies[n])
     : Object.keys(bodies);
 
-  if(!allNames.length) return;
+  if(!allNames.length){
+    ctx.fillStyle = 'rgba(150,160,200,.45)';
+    ctx.font = '13px "JetBrains Mono",monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(_PSC.mode === 'select' ? 'Select at least one body above.' : 'No bodies in system.', W/2, H/2);
+    return;
+  }
 
   // Gather radii and sort smallest to largest
   const items = allNames.map(n => {
@@ -958,11 +944,6 @@ function _pscDraw(){
     ctx.fillText(_pscFmtRadius(it.r_m), 0, fontSize + 2);
     ctx.restore();
   });
-
-  // Scale bar in two-body mode
-  if(_PSC.mode === 'two' && layout.length === 2){
-    _pscDrawScaleBar(ctx, layout.map(l => l.name), layout.map(l => l.r_m), totalW, H);
-  }
 
   ctx.restore();
 
