@@ -3441,15 +3441,15 @@ document.addEventListener('keydown', function(e){
           PLANET TOOLS</div>
 
         <!-- Tool items — each is a large tappable row that expands a panel -->
-        <div class="calc-tool-item" id="calc-tool-circ" onclick="calcToggleTool('circ')">
-          <div class="calc-tool-header">
+        <div class="calc-tool-item" id="calc-tool-circ">
+          <div class="calc-tool-header" onclick="calcToggleTool('circ')" style="cursor:pointer">
             <div>
               <div class="calc-tool-name">Circumference</div>
               <div class="calc-tool-formula">2 π r</div>
             </div>
             <div class="calc-tool-arrow" id="calc-arrow-circ">▶</div>
           </div>
-          <div class="calc-tool-panel" id="calc-panel-circ" style="display:none">
+          <div class="calc-tool-panel" id="calc-panel-circ" style="display:none" onclick="event.stopPropagation()">
             <div class="calc-desc">Full equatorial circumference of the planet surface.</div>
             <div class="calc-result-wrap">
               <div class="calc-result-label">RESULT</div>
@@ -3458,15 +3458,15 @@ document.addEventListener('keydown', function(e){
           </div>
         </div>
 
-        <div class="calc-tool-item" id="calc-tool-cloud" onclick="calcToggleTool('cloud')">
-          <div class="calc-tool-header">
+        <div class="calc-tool-item" id="calc-tool-cloud">
+          <div class="calc-tool-header" onclick="calcToggleTool('cloud')" style="cursor:pointer">
             <div>
               <div class="calc-tool-name">Cloud Width</div>
               <div class="calc-tool-formula">2 π (r + cloudStartHeight) / N</div>
             </div>
             <div class="calc-tool-arrow" id="calc-arrow-cloud">▶</div>
           </div>
-          <div class="calc-tool-panel" id="calc-panel-cloud" style="display:none">
+          <div class="calc-tool-panel" id="calc-panel-cloud" style="display:none" onclick="event.stopPropagation()">
             <div class="calc-desc">Width of one cloud tile for N tiles covering the full cloud layer circumference.</div>
             <div style="display:flex;align-items:center;gap:10px;margin:10px 0 4px">
               <label style="font-size:.58rem;color:var(--sky2);opacity:.75;letter-spacing:.08em;white-space:nowrap">N (TILES)</label>
@@ -3483,15 +3483,15 @@ document.addEventListener('keydown', function(e){
           </div>
         </div>
 
-        <div class="calc-tool-item" id="calc-tool-hm" onclick="calcToggleTool('hm')">
-          <div class="calc-tool-header">
+        <div class="calc-tool-item" id="calc-tool-hm">
+          <div class="calc-tool-header" onclick="calcToggleTool('hm')" style="cursor:pointer">
             <div>
               <div class="calc-tool-name">Heightmap Width</div>
               <div class="calc-tool-formula">2 π r / N</div>
             </div>
             <div class="calc-tool-arrow" id="calc-arrow-hm">▶</div>
           </div>
-          <div class="calc-tool-panel" id="calc-panel-hm" style="display:none">
+          <div class="calc-tool-panel" id="calc-panel-hm" style="display:none" onclick="event.stopPropagation()">
             <div class="calc-desc">Width covered by one column of a heightmap PNG with N total columns.</div>
             <div style="display:flex;align-items:center;gap:10px;margin:10px 0 4px">
               <label style="font-size:.58rem;color:var(--sky2);opacity:.75;letter-spacing:.08em;white-space:nowrap">N (COLUMNS)</label>
@@ -3516,7 +3516,7 @@ document.addEventListener('keydown', function(e){
 /* ── Calculator tool rows ── */
 .calc-tool-item {
   border:1px solid var(--ac13);border-radius:7px;margin-bottom:7px;
-  overflow:hidden;cursor:pointer;transition:border-color .18s,background .18s;
+  overflow:hidden;cursor:default;transition:border-color .18s,background .18s;
   background:var(--ac08);
 }
 .calc-tool-item:hover { border-color:var(--ac30);background:var(--ac10); }
@@ -3525,6 +3525,7 @@ document.addEventListener('keydown', function(e){
   display:flex;align-items:center;justify-content:space-between;
   padding:13px 14px;min-height:52px;
 }
+.calc-tool-header:hover { opacity:.85; }
 .calc-tool-name {
   font-size:.72rem;color:var(--ink3);letter-spacing:.05em;margin-bottom:3px;
 }
