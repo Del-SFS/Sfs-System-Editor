@@ -1381,74 +1381,66 @@ vp.addEventListener('touchcancel', _cancelHold, { passive: true });
 
 // ── Menu action functions ─────────────────────────────────────────────────
 // ── Clipboard state ───────────────────────────────────────────────────────
-let _bodyClipboard = null;  // deep-copy of a body's data, or null
+// Array of { name, data, preset } — persists across cuts/copies
+let _bodyClipboard = [];
+
+function _clipboardAdd(name, removeFromSystem){
+  if(!name || !bodies[name] || bodies[name].isCenter) return;
+  const entry = {
+    name,
+    data:   JSON.parse(JSON.stringify(bodies[name].data)),
+    preset: bodies[name].preset
+  };
+  // Avoid duplicates by name — replace if already in clipboard
+  const idx = _bodyClipboard.findIndex(e => e.name === name);
+  if(idx !== -1) _bodyClipboard.splice(idx, 1, entry);
+  else _bodyClipboard.push(entry);
+
+  if(removeFromSystem){
+    pushUndo();
+    delete bodies[name];
+    if(typeof selectedBody !== 'undefined' && selectedBody === name){
+      selectedBody = null;
+      const sbSel = document.getElementById('sb-sel');
+      if(sbSel) sbSel.textContent = '—';
+    }
+    if(typeof drawViewport === 'function') drawViewport();
+    if(typeof updateStatusBar === 'function') updateStatusBar();
+  }
+  // Refresh clipboard tab badge
+  _updateClipboardBadge();
+}
+
+function _updateClipboardBadge(){
+  const tab = document.getElementById('prs-tab-clipboard');
+  if(!tab) return;
+  const n = _bodyClipboard.length;
+  tab.textContent = n > 0 ? `📋 CLIPBOARD (${n})` : '📋 CLIPBOARD';
+}
 
 function bctxCut(){
   const name = _ctxMenuBody;
   closeBodyCtxMenu();
   if(!name || !bodies[name]) return;
-  if(bodies[name].isCenter) return; // cannot cut the system centre
-  // Copy data then delete
-  _bodyClipboard = { name, data: JSON.parse(JSON.stringify(bodies[name].data)), preset: bodies[name].preset };
-  _updatePasteState();
-  pushUndo();
-  delete bodies[name];
-  if(typeof selectedBody !== 'undefined' && selectedBody === name){
-    selectedBody = null;
-    const sbSel = document.getElementById('sb-sel');
-    if(sbSel) sbSel.textContent = '—';
-  }
-  if(typeof drawViewport === 'function') drawViewport();
-  if(typeof updateStatusBar === 'function') updateStatusBar();
+  if(bodies[name].isCenter) return;
+  _clipboardAdd(name, true);
 }
 
 function bctxCopy(){
   const name = _ctxMenuBody;
   closeBodyCtxMenu();
   if(!name || !bodies[name]) return;
-  if(bodies[name].isCenter) return; // cannot copy the system centre
-  _bodyClipboard = { name, data: JSON.parse(JSON.stringify(bodies[name].data)), preset: bodies[name].preset };
-  _updatePasteState();
+  if(bodies[name].isCenter) return;
+  _clipboardAdd(name, false);
 }
 
-function bctxPaste(){
-  closeBodyCtxMenu();
-  if(!_bodyClipboard) return;
-  // Generate a unique name
-  let newName = _bodyClipboard.name + '_copy';
-  let n = 2;
-  while(bodies[newName]) { newName = _bodyClipboard.name + '_copy' + n++; }
-  pushUndo();
-  const newData = JSON.parse(JSON.stringify(_bodyClipboard.data));
-  // Sanitize: strip isCenter — a copy can never be the system centre
-  delete newData.isCenter;
-  // Offset SMA slightly so it doesn't sit exactly on top of the original
-  if(newData.ORBIT_DATA) {
-    newData.ORBIT_DATA.SMA = (parseFloat(newData.ORBIT_DATA.SMA) || 0) * 1.1 || 1e8;
-  } else {
-    // Original had no orbit (was a centre body) — give it a default orbit around the centre
-    const centre = Object.keys(bodies).find(k => bodies[k].isCenter);
-    newData.ORBIT_DATA = { parent: centre || 'Sun', SMA: 1e8, E: 0, direction: 1 };
-  }
-  bodies[newName] = { preset: _bodyClipboard.preset, data: newData };
-  if(typeof drawViewport === 'function') drawViewport();
-  if(typeof updateStatusBar === 'function') updateStatusBar();
-}
+// _updatePasteState kept as no-op for compatibility
+function _updatePasteState(){}
 
-// Grey-out Paste when clipboard is empty
-function _updatePasteState(){
-  const btn = document.getElementById('bctx-paste');
-  if(!btn) return;
-  if(_bodyClipboard) btn.classList.remove('disabled');
-  else               btn.classList.add('disabled');
-}
-
-// Also update paste state every time the menu opens
-// Keyboard shortcuts: Ctrl/Cmd + X / C / V when a body is selected or menu open
+// Keyboard shortcuts: Ctrl/Cmd + X / C
 document.addEventListener('keydown', e => {
   const mod = e.ctrlKey || e.metaKey;
   if(!mod) return;
-  // Only trigger if not focused on an input/textarea
   if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)) return;
 
   if(e.key === 'x' || e.key === 'X'){
@@ -1460,15 +1452,10 @@ document.addEventListener('keydown', e => {
     }
   } else if(e.key === 'c' || e.key === 'C'){
     const name = _ctxMenuBody || (typeof selectedBody !== 'undefined' ? selectedBody : null);
-    if(name && bodies[name]){
+    if(name && bodies[name] && !bodies[name].isCenter){
       _ctxMenuBody = name;
       e.preventDefault();
       bctxCopy();
-    }
-  } else if(e.key === 'v' || e.key === 'V'){
-    if(_bodyClipboard){
-      e.preventDefault();
-      bctxPaste();
     }
   }
 });

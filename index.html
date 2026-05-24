@@ -333,6 +333,7 @@
       <button class="prs-tab" onclick="prsSetTab('vanilla',this)">🌍 VANILLA</button>
       <button class="prs-tab" onclick="prsSetTab('custom',this)">⭐ CUSTOM</button>
       <button class="prs-tab" id="prs-tab-system" onclick="prsSetTab('system',this)" style="display:none">🚀 SYSTEM</button>
+      <button class="prs-tab prs-tab-clipboard" id="prs-tab-clipboard" onclick="prsSetTab('clipboard',this)">📋 CLIPBOARD</button>
     </div>
     <!-- Search -->
     <div class="prs-search-wrap">
@@ -3814,16 +3815,12 @@ document.addEventListener('keydown', function(e){
 <div id="body-ctx-menu" style="display:none">
   <div class="bctx-title" id="bctx-title">PLANET</div>
   <button class="bctx-btn bctx-cut"   id="bctx-cut"   onclick="bctxCut()">
-    <span class="bctx-icon">✂</span> Cut
+    <span class="bctx-icon">✂</span> Cut to Clipboard
     <span class="bctx-shortcut">⌘X</span>
   </button>
   <button class="bctx-btn bctx-copy"  id="bctx-copy"  onclick="bctxCopy()">
-    <span class="bctx-icon">⎘</span> Copy
+    <span class="bctx-icon">⎘</span> Copy to Clipboard
     <span class="bctx-shortcut">⌘C</span>
-  </button>
-  <button class="bctx-btn bctx-paste" id="bctx-paste" onclick="bctxPaste()">
-    <span class="bctx-icon">📋</span> Paste
-    <span class="bctx-shortcut">⌘V</span>
   </button>
   <div class="bctx-divider"></div>
   <button class="bctx-btn bctx-group" id="bctx-group" onclick="bctxGroupSelect()">◉ Group Select</button>

@@ -507,6 +507,15 @@ body {
 }
 .prs-card-badge.custom { border-color: var(--amber); color: var(--amber); }
 
+/* Clipboard card delete button */
+.prs-clip-del {
+  position: absolute; bottom: 4px; right: 4px;
+  background: none; border: 1px solid rgba(255,80,80,.25); border-radius: 3px;
+  color: rgba(255,100,100,.6); font-size: .6rem; padding: 1px 5px; cursor: pointer;
+  line-height: 1.4; transition: background .15s, color .15s;
+}
+.prs-clip-del:hover { background: rgba(255,60,60,.15); color: rgba(255,120,120,.95); }
+
 .prs-empty { color: var(--ink4); font-family: monospace; font-size: .65rem; text-align: center; padding: 30px 10px; }
 
 /* Category group headers in grid */
@@ -962,6 +971,13 @@ body {
 }
 .prs-card-badge.custom { background: rgba(255,180,64,.08); border-color: rgba(255,180,64,.25); color: var(--amber); }
 .prs-card-badge.system { background: rgba(64,204,128,.08); border-color: rgba(64,204,128,.25); color: #40cc80; }
+.prs-clip-del {
+  position: absolute; bottom: 4px; right: 4px;
+  background: none; border: 1px solid rgba(255,80,80,.25); border-radius: 3px;
+  color: rgba(255,100,100,.6); font-size: .6rem; padding: 1px 5px; cursor: pointer;
+  line-height: 1.4; transition: background .15s, color .15s;
+}
+.prs-clip-del:hover { background: rgba(255,60,60,.15); color: rgba(255,120,120,.95); }
 
 .prs-empty { color: var(--ink4); font-family: 'JetBrains Mono',monospace; font-size: .65rem; text-align: center; padding: 30px 10px; }
 
