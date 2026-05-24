@@ -338,6 +338,15 @@ let _hmtBmpH     = 0;
 let _hmtProfile  = null;   // Float32Array of height values [0..1], output-width samples
 let _hmtDragging = false;
 
+// Multi-breakpoint system
+// Each breakpoint: { x: 0..1 fraction along width, lat: 0..1 fraction top→bottom }
+// Sorted by x. First always at x=0, last always at x=1.
+let _hmtBreakpoints = [
+  { x: 0,   lat: 0.5 },
+  { x: 1,   lat: 0.5 }
+];
+let _hmtDragBpIdx = -1;   // index of currently dragged breakpoint
+
 function openHeightmapTools() {
   _utilsDropOpen = false;
   document.getElementById('utils-dropdown').style.display = 'none';
@@ -356,8 +365,34 @@ document.getElementById('hmt-modal').addEventListener('mousedown', function(e){
 });
 
 function hmtSetTab(tab) {
-  // Only one tab for now
   document.getElementById('hmt-bumpmap').style.display = 'flex';
+}
+
+// ── Breakpoint management ─────────────────────────────────────
+function hmtAddBreakpoint() {
+  // Insert a new breakpoint in the middle of the longest gap
+  const bps = _hmtBreakpoints;
+  let bestGap = -1, bestIdx = 0;
+  for(let i = 0; i < bps.length - 1; i++) {
+    const gap = bps[i+1].x - bps[i].x;
+    if(gap > bestGap) { bestGap = gap; bestIdx = i; }
+  }
+  const newX   = (bps[bestIdx].x + bps[bestIdx+1].x) / 2;
+  const newLat = (bps[bestIdx].lat + bps[bestIdx+1].lat) / 2;
+  bps.splice(bestIdx + 1, 0, { x: newX, lat: newLat });
+  hmtUpdate();
+}
+
+function hmtRemoveBreakpoint() {
+  // Remove last interior breakpoint (keep endpoints)
+  if(_hmtBreakpoints.length <= 2) return;
+  _hmtBreakpoints.splice(_hmtBreakpoints.length - 2, 1);
+  hmtUpdate();
+}
+
+function hmtResetBreakpoints() {
+  _hmtBreakpoints = [{ x: 0, lat: 0.5 }, { x: 1, lat: 0.5 }];
+  hmtUpdate();
 }
 
 // ── Load bump map image ───────────────────────────────────────
@@ -389,6 +424,7 @@ function hmtLoadFile(file) {
       document.getElementById('hmt-dropzone').style.display = 'none';
       document.getElementById('hmt-loaded').style.display   = 'flex';
 
+      hmtResetBreakpoints();
       hmtInitOverlayEvents();
       hmtUpdate();
     };
@@ -397,69 +433,132 @@ function hmtLoadFile(file) {
   reader.readAsDataURL(file);
 }
 
-// ── Overlay drag events ───────────────────────────────────────
+// ── Overlay drag events (multi-breakpoint, touch + mouse) ────
 function hmtInitOverlayEvents() {
-  const ov  = document.getElementById('hmt-overlay');
-  const lat = document.getElementById('hmt-lat');
+  const ov = document.getElementById('hmt-overlay');
+  // Remove old listeners by cloning
+  const fresh = ov.cloneNode(false);
+  ov.parentNode.replaceChild(fresh, ov);
+  const el = fresh;
 
-  function posToLat(clientY) {
-    const rect = ov.getBoundingClientRect();
-    const frac = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
-    return (frac * 100).toFixed(1);
+  function clientToFrac(clientX, clientY) {
+    const rect = el.getBoundingClientRect();
+    return {
+      xf: Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)),
+      yf: Math.max(0, Math.min(1, (clientY - rect.top)  / rect.height))
+    };
   }
 
-  ov.addEventListener('mousedown', e => { _hmtDragging = true; lat.value = posToLat(e.clientY); hmtUpdate(); });
-  ov.addEventListener('mousemove', e => { if(_hmtDragging){ lat.value = posToLat(e.clientY); hmtUpdate(); } });
-  window.addEventListener('mouseup', () => { _hmtDragging = false; });
+  function findHandle(xf, yf) {
+    // Hit-test against each breakpoint handle in canvas-space
+    const W = el.getBoundingClientRect().width;
+    const H = el.getBoundingClientRect().height;
+    const R = Math.max(14, H * 0.04); // hit radius in px
+    const bps = _hmtBreakpoints;
+    for(let i = 0; i < bps.length; i++) {
+      const hx = bps[i].x * W;
+      const hy = bps[i].lat * H;
+      const rect = el.getBoundingClientRect();
+      const cx = bps[i].x * rect.width;
+      const cy = bps[i].lat * rect.height;
+      const dx = xf * rect.width  - cx;
+      const dy = yf * rect.height - cy;
+      if(Math.sqrt(dx*dx + dy*dy) <= R) return i;
+    }
+    return -1;
+  }
 
-  ov.addEventListener('touchstart', e => { _hmtDragging = true; lat.value = posToLat(e.touches[0].clientY); hmtUpdate(); }, {passive:true});
-  ov.addEventListener('touchmove',  e => { if(_hmtDragging){ lat.value = posToLat(e.touches[0].clientY); hmtUpdate(); } }, {passive:true});
-  ov.addEventListener('touchend',   () => { _hmtDragging = false; });
+  function onStart(clientX, clientY) {
+    const { xf, yf } = clientToFrac(clientX, clientY);
+    _hmtDragBpIdx = findHandle(xf, yf);
+    if(_hmtDragBpIdx >= 0) {
+      _hmtDragging = true;
+    }
+  }
+
+  function onMove(clientX, clientY) {
+    if(!_hmtDragging || _hmtDragBpIdx < 0) return;
+    const { xf, yf } = clientToFrac(clientX, clientY);
+    const bp = _hmtBreakpoints[_hmtDragBpIdx];
+    // Endpoints can only move vertically; interior points move both axes
+    bp.lat = Math.max(0, Math.min(1, yf));
+    if(_hmtDragBpIdx > 0 && _hmtDragBpIdx < _hmtBreakpoints.length - 1) {
+      // Constrain x between neighbours
+      const xMin = _hmtBreakpoints[_hmtDragBpIdx - 1].x + 0.01;
+      const xMax = _hmtBreakpoints[_hmtDragBpIdx + 1].x - 0.01;
+      bp.x = Math.max(xMin, Math.min(xMax, xf));
+    }
+    hmtUpdate();
+  }
+
+  function onEnd() { _hmtDragging = false; _hmtDragBpIdx = -1; }
+
+  el.addEventListener('mousedown',  e => { e.preventDefault(); onStart(e.clientX, e.clientY); });
+  window.addEventListener('mousemove', e => { onMove(e.clientX, e.clientY); });
+  window.addEventListener('mouseup',   onEnd);
+
+  el.addEventListener('touchstart', e => { e.preventDefault(); onStart(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
+  el.addEventListener('touchmove',  e => { e.preventDefault(); onMove(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
+  el.addEventListener('touchend',   onEnd);
+}
+
+// ── Interpolate lat fraction at output column i (0..outW-1) ──
+function _hmtLatAtCol(i, outW) {
+  const xf  = i / (outW - 1);
+  const bps = _hmtBreakpoints;
+  // Find enclosing segment
+  for(let s = 0; s < bps.length - 1; s++) {
+    if(xf <= bps[s+1].x) {
+      const span = bps[s+1].x - bps[s].x;
+      const t    = span < 1e-9 ? 0 : (xf - bps[s].x) / span;
+      // Smooth step interpolation so breakpoint seams are soft
+      const ts   = t * t * (3 - 2 * t);
+      return bps[s].lat * (1 - ts) + bps[s+1].lat * ts;
+    }
+  }
+  return bps[bps.length-1].lat;
 }
 
 // ── Main update ───────────────────────────────────────────────
 function hmtUpdate() {
   if(!_hmtBmpPx) return;
 
-  const latFrac   = parseFloat(document.getElementById('hmt-lat').value) / 100;   // 0=top 1=bottom
-  const lonOff    = parseFloat(document.getElementById('hmt-lon').value) / 100;   // 0–1 fraction
+  const lonOff    = parseFloat(document.getElementById('hmt-lon').value) / 100;
   const scale     = parseFloat(document.getElementById('hmt-scale').value);
   const smooth    = parseInt(document.getElementById('hmt-smooth').value);
   const invert    = document.getElementById('hmt-invert').checked;
   const outW      = parseInt(document.getElementById('hmt-width').value);
 
   // Update labels
-  const latDeg = Math.round((latFrac - 0.5) * 180);
-  document.getElementById('hmt-lat-val').textContent    = (latDeg >= 0 ? '+' : '') + latDeg + '°';
   document.getElementById('hmt-lon-val').textContent    = Math.round(lonOff * 360) + '°';
   document.getElementById('hmt-scale-val').textContent  = scale.toFixed(2) + '×';
   document.getElementById('hmt-smooth-val').textContent = smooth;
 
-  // Sample row from bump map — interpolate between two rows for sub-pixel accuracy
-  const rowF  = latFrac * (_hmtBmpH - 1);
-  const row0  = Math.floor(rowF);
-  const row1  = Math.min(row0 + 1, _hmtBmpH - 1);
-  const rowT  = rowF - row0;
-
   const raw = new Float32Array(outW);
   for(let i = 0; i < outW; i++) {
-    // Map output column i → source column with longitude offset
+    // Per-column latitude from breakpoint path
+    const latFrac = _hmtLatAtCol(i, outW);
+    const rowF  = latFrac * (_hmtBmpH - 1);
+    const row0  = Math.floor(rowF);
+    const row1  = Math.min(row0 + 1, _hmtBmpH - 1);
+    const rowT  = rowF - row0;
+
+    // Map output column → source column with longitude offset
     const srcFrac = ((i / outW) + lonOff) % 1;
     const srcX    = srcFrac * (_hmtBmpW - 1);
     const x0 = Math.floor(srcX), x1 = Math.min(x0 + 1, _hmtBmpW - 1);
     const xT = srcX - x0;
 
-    // Bilinear sample — use luminance (R channel of greyscale)
     function luma(row, col) {
       const idx = (row * _hmtBmpW + col) * 4;
-      return _hmtBmpPx[idx] / 255; // R channel (same as G and B for greyscale)
+      return _hmtBmpPx[idx] / 255;
     }
     const v = (luma(row0, x0) * (1-xT) + luma(row0, x1) * xT) * (1-rowT)
             + (luma(row1, x0) * (1-xT) + luma(row1, x1) * xT) * rowT;
     raw[i] = invert ? (1 - v) : v;
   }
 
-  // Gaussian smoothing
+  // Gaussian smoothing (handles spike smoothing at breakpoint seams)
   const prof = smooth > 0 ? _hmtGaussian(raw, smooth) : raw;
 
   // Apply scale — clamp to [0..1]
@@ -468,7 +567,7 @@ function hmtUpdate() {
     _hmtProfile[i] = Math.max(0, Math.min(1, prof[i] * scale));
   }
 
-  hmtDrawOverlay(latFrac, lonOff);
+  hmtDrawOverlay(lonOff);
   hmtDrawProfile();
 }
 
@@ -477,7 +576,6 @@ function _hmtGaussian(data, radius) {
   const N   = data.length;
   const sigma = radius / 2;
   const ks = Math.ceil(radius * 2);
-  // Build kernel
   const kern = new Float32Array(ks * 2 + 1);
   let ksum = 0;
   for(let i = -ks; i <= ks; i++) {
@@ -488,39 +586,76 @@ function _hmtGaussian(data, radius) {
   for(let x = 0; x < N; x++) {
     let acc = 0;
     for(let k = -ks; k <= ks; k++) {
-      acc += data[(x + k + N) % N] * kern[k + ks]; // wrap-around (equirectangular is cyclic)
+      acc += data[(x + k + N) % N] * kern[k + ks];
     }
     out[x] = acc;
   }
   return out;
 }
 
-// ── Draw overlay line on the preview image ────────────────────
-function hmtDrawOverlay(latFrac, lonOff) {
-  const ov  = document.getElementById('hmt-overlay');
-  const ctx = ov.getContext('2d');
-  const W = ov.width, H = ov.height;
-  const y = Math.round(latFrac * H);
+// ── Draw overlay: multi-breakpoint path + handles ─────────────
+function hmtDrawOverlay(lonOff) {
+  const el  = document.getElementById('hmt-overlay');
+  const ctx = el.getContext('2d');
+  const W = el.width, H = el.height;
+  const bps = _hmtBreakpoints;
+  const lw  = Math.max(1.5, H / 180);
+  const handleR = Math.max(8, H / 50);
 
   ctx.clearRect(0, 0, W, H);
 
-  // Draw sample line
-  ctx.strokeStyle = 'rgba(100,220,180,.85)';
-  ctx.lineWidth   = Math.max(1, H / 200);
+  // ── Sample path (solid teal line through breakpoints) ──
+  ctx.strokeStyle = 'rgba(100,220,180,.9)';
+  ctx.lineWidth   = lw;
   ctx.setLineDash([]);
-  ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  ctx.beginPath();
+  for(let i = 0; i < bps.length; i++) {
+    const px = bps[i].x * W;
+    const py = bps[i].lat * H;
+    i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+  }
+  ctx.stroke();
 
-  // Longitude offset marker
+  // ── Longitude offset marker (vertical dashed amber line) ──
   const lonX = Math.round(lonOff * W);
-  ctx.strokeStyle = 'rgba(255,200,80,.7)';
-  ctx.lineWidth   = Math.max(1, H / 200);
-  ctx.setLineDash([4, 4]);
+  ctx.strokeStyle = 'rgba(255,200,80,.65)';
+  ctx.lineWidth   = lw;
+  ctx.setLineDash([Math.max(3, H/80), Math.max(3, H/80)]);
   ctx.beginPath(); ctx.moveTo(lonX, 0); ctx.lineTo(lonX, H); ctx.stroke();
   ctx.setLineDash([]);
 
-  // Drag handle on the latitude line
-  ctx.fillStyle = 'rgba(100,220,180,.9)';
-  ctx.beginPath(); ctx.arc(W / 2, y, Math.max(6, H / 60), 0, Math.PI*2); ctx.fill();
+  // ── Breakpoint handles ──
+  for(let i = 0; i < bps.length; i++) {
+    const px = bps[i].x * W;
+    const py = bps[i].lat * H;
+    const isEnd = (i === 0 || i === bps.length - 1);
+    const isHot = (i === _hmtDragBpIdx);
+
+    // Shadow
+    ctx.shadowColor   = 'rgba(0,0,0,.5)';
+    ctx.shadowBlur    = 6;
+
+    // Outer ring
+    ctx.strokeStyle = isHot ? 'rgba(255,255,100,.95)' : 'rgba(100,220,180,.95)';
+    ctx.lineWidth   = lw * 1.2;
+    ctx.beginPath(); ctx.arc(px, py, handleR, 0, Math.PI*2); ctx.stroke();
+
+    // Fill
+    ctx.fillStyle = isEnd
+      ? 'rgba(100,220,180,.35)'
+      : (isHot ? 'rgba(255,255,100,.45)' : 'rgba(100,220,180,.55)');
+    ctx.beginPath(); ctx.arc(px, py, handleR - lw, 0, Math.PI*2); ctx.fill();
+
+    ctx.shadowBlur = 0;
+
+    // Label: lat degrees
+    const latDeg = Math.round((bps[i].lat - 0.5) * 180);
+    const label  = (latDeg >= 0 ? '+' : '') + latDeg + '°';
+    ctx.font      = `bold ${Math.max(9, H/55)}px 'JetBrains Mono', monospace`;
+    ctx.fillStyle = isHot ? 'rgba(255,255,140,.95)' : 'rgba(100,220,180,.9)';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, px, py - handleR - 4);
+  }
 }
 
 // ── Draw height profile canvas ────────────────────────────────
@@ -536,20 +671,18 @@ function hmtDrawProfile() {
   ctx.fillRect(0, 0, W, H);
 
   const N = _hmtProfile.length;
-  // Fill
   const grad = ctx.createLinearGradient(0, 0, 0, H);
   grad.addColorStop(0, 'rgba(100,220,180,.6)');
   grad.addColorStop(1, 'rgba(100,220,180,.08)');
   ctx.fillStyle = grad;
   ctx.beginPath();
-  ctx.moveTo(0, H);
   for(let i = 0; i < N; i++) {
     const x = (i / (N - 1)) * W;
     const y = H - _hmtProfile[i] * (H - 2) - 1;
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   }
-  ctx.lineTo(W, H); ctx.closePath(); ctx.fill();
-  // Line
+  ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath(); ctx.fill();
+
   ctx.strokeStyle = 'rgba(100,220,180,.9)';
   ctx.lineWidth   = 1.5;
   ctx.beginPath();
@@ -559,18 +692,23 @@ function hmtDrawProfile() {
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   }
   ctx.stroke();
+
+  // Draw vertical tick marks where breakpoints are
+  ctx.strokeStyle = 'rgba(100,220,180,.35)';
+  ctx.lineWidth   = 1;
+  ctx.setLineDash([2, 3]);
+  for(let i = 1; i < _hmtBreakpoints.length - 1; i++) {
+    const px = _hmtBreakpoints[i].x * W;
+    ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, H); ctx.stroke();
+  }
+  ctx.setLineDash([]);
 }
 
 // ── Download as SFS heightmap PNG ─────────────────────────────
-// SFS format: RGBA PNG where alpha encodes terrain height.
-// Per _parseHmPng: scan bottom→top per column; first pixel where alpha < 255
-// gives height = (j + alpha_frac) / H  where j=0 is image bottom.
-// We encode height fraction h by placing the top-edge at row (H - floor(h*H) - 1)
-// with alpha = fractional part * 255, everything below fully opaque, above transparent.
 function hmtDownloadPNG() {
   if(!_hmtProfile) { alert('Load a bump map first.'); return; }
   const outW = _hmtProfile.length;
-  const outH = 256; // standard SFS heightmap height
+  const outH = 256;
   const outC = document.createElement('canvas');
   outC.width = outW; outC.height = outH;
   const ctx  = outC.getContext('2d');
@@ -578,24 +716,18 @@ function hmtDownloadPNG() {
   const d    = imgd.data;
 
   for(let x = 0; x < outW; x++) {
-    const frac    = _hmtProfile[outW - x - 1]; // horizontal mirror (game convention)
-    // row 0 = top of canvas = j = H-1 bottom-up
-    // terrain fills from bottom; edge pixel row (canvas) = H - 1 - Math.floor(frac * H)
+    const frac    = _hmtProfile[outW - x - 1];
     const edgeRow = outH - 1 - Math.floor(frac * (outH - 1));
     const alpha   = Math.round((frac * (outH - 1) - Math.floor(frac * (outH - 1))) * 255);
 
     for(let y = 0; y < outH; y++) {
       const idx = (y * outW + x) * 4;
-      d[idx]     = 200; // R
-      d[idx + 1] = 200; // G
-      d[idx + 2] = 200; // B
-      if(y > edgeRow) {
-        d[idx + 3] = 255; // below edge = fully opaque (terrain body)
-      } else if(y === edgeRow) {
-        d[idx + 3] = alpha; // edge pixel = fractional alpha
-      } else {
-        d[idx + 3] = 0;   // above edge = transparent (sky)
-      }
+      d[idx]     = 200;
+      d[idx + 1] = 200;
+      d[idx + 2] = 200;
+      if(y > edgeRow)      d[idx + 3] = 255;
+      else if(y === edgeRow) d[idx + 3] = alpha;
+      else                  d[idx + 3] = 0;
     }
   }
 

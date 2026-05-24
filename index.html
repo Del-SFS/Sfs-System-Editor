@@ -3939,41 +3939,56 @@ document.addEventListener('keydown', function(e){
       <div id="hmt-loaded" style="display:none;flex-direction:column;gap:0">
 
         <!-- Image preview canvas -->
-        <div style="position:relative;margin:0 16px 0">
-          <canvas id="hmt-preview" style="width:100%;height:auto;display:block;border-radius:4px;cursor:crosshair"></canvas>
-          <!-- Overlay canvas for the sample line -->
-          <canvas id="hmt-overlay" style="position:absolute;inset:0;width:100%;height:100%;cursor:ns-resize;pointer-events:all"></canvas>
+        <div style="position:relative;margin:0 16px 0;touch-action:none">
+          <canvas id="hmt-preview" style="width:100%;height:auto;display:block;border-radius:4px"></canvas>
+          <!-- Overlay canvas for the sample line + breakpoint handles -->
+          <canvas id="hmt-overlay" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:all;touch-action:none"></canvas>
+        </div>
+
+        <!-- Breakpoint toolbar -->
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 16px 4px;flex-wrap:wrap">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:.5rem;color:rgba(150,160,200,.5);letter-spacing:.06em">SAMPLE PATH</span>
+          <button onclick="hmtAddBreakpoint()" style="font-family:'JetBrains Mono',monospace;font-size:.52rem;
+            padding:5px 12px;border-radius:3px;cursor:pointer;letter-spacing:.05em;min-height:32px;
+            border:1px solid rgba(100,220,180,.4);background:rgba(100,220,180,.08);color:rgba(100,220,180,.85)">
+            + ADD BREAKPOINT
+          </button>
+          <button onclick="hmtRemoveBreakpoint()" style="font-family:'JetBrains Mono',monospace;font-size:.52rem;
+            padding:5px 12px;border-radius:3px;cursor:pointer;letter-spacing:.05em;min-height:32px;
+            border:1px solid rgba(255,120,80,.35);background:rgba(255,120,80,.07);color:rgba(255,140,100,.75)">
+            − REMOVE LAST
+          </button>
+          <button onclick="hmtResetBreakpoints()" style="font-family:'JetBrains Mono',monospace;font-size:.52rem;
+            padding:5px 12px;border-radius:3px;cursor:pointer;letter-spacing:.05em;min-height:32px;
+            border:1px solid rgba(150,160,200,.25);background:rgba(150,160,200,.05);color:rgba(150,160,200,.6)">
+            ↺ RESET
+          </button>
+          <span id="hmt-bp-hint" style="font-family:'JetBrains Mono',monospace;font-size:.48rem;color:rgba(150,160,200,.4);margin-left:4px">
+            drag handles on image to set latitude per segment
+          </span>
         </div>
 
         <!-- Controls -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 20px;padding:14px 16px">
+        <div class="hmt-controls-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px 20px;padding:10px 16px">
 
           <!-- Left column -->
           <div style="display:flex;flex-direction:column;gap:10px">
 
             <div>
               <label style="font-family:'JetBrains Mono',monospace;font-size:.55rem;color:rgba(100,220,180,.7);letter-spacing:.07em;display:block;margin-bottom:4px">
-                SAMPLE LATITUDE <span id="hmt-lat-val" style="color:rgba(180,210,255,.8)">0°</span>
-                <span style="color:rgba(150,160,200,.45);font-size:.48rem;margin-left:4px">(drag line on image)</span>
-              </label>
-              <input type="range" id="hmt-lat" min="0" max="100" value="50" step="0.1"
-                style="width:100%;accent-color:#64dcb4" oninput="hmtUpdate()">
-            </div>
-
-            <div>
-              <label style="font-family:'JetBrains Mono',monospace;font-size:.55rem;color:rgba(100,220,180,.7);letter-spacing:.07em;display:block;margin-bottom:4px">
                 LONGITUDE OFFSET <span id="hmt-lon-val" style="color:rgba(180,210,255,.8)">0°</span>
               </label>
               <input type="range" id="hmt-lon" min="0" max="100" value="0" step="0.1"
-                style="width:100%;accent-color:#64dcb4" oninput="hmtUpdate()">
+                style="width:100%;accent-color:#64dcb4;min-height:20px" oninput="hmtUpdate()">
             </div>
 
             <div>
               <label style="font-family:'JetBrains Mono',monospace;font-size:.55rem;color:rgba(100,220,180,.7);letter-spacing:.07em;display:block;margin-bottom:4px">
-                SMOOTHING <span id="hmt-smooth-val" style="color:rgba(180,210,255,.8)">0</span>
+                SPIKE SMOOTHING <span id="hmt-smooth-val" style="color:rgba(180,210,255,.8)">0</span>
+                <span style="color:rgba(150,160,200,.35);font-size:.46rem;margin-left:4px">blends breakpoint seams</span>
               </label>
-              <input type="range" id="hmt-smooth" min="0" max="60" value="0" step="1"
-                style="width:100%;accent-color:#64dcb4" oninput="hmtUpdate()">
+              <input type="range" id="hmt-smooth" min="0" max="60" value="8" step="1"
+                style="width:100%;accent-color:#64dcb4;min-height:20px" oninput="hmtUpdate()">
             </div>
 
           </div>
@@ -3986,7 +4001,7 @@ document.addEventListener('keydown', function(e){
                 HEIGHT SCALE <span id="hmt-scale-val" style="color:rgba(180,210,255,.8)">1.0×</span>
               </label>
               <input type="range" id="hmt-scale" min="0.1" max="3" value="1" step="0.05"
-                style="width:100%;accent-color:#64dcb4" oninput="hmtUpdate()">
+                style="width:100%;accent-color:#64dcb4;min-height:20px" oninput="hmtUpdate()">
             </div>
 
             <div>
@@ -3995,7 +4010,7 @@ document.addEventListener('keydown', function(e){
               </label>
               <select id="hmt-width" style="width:100%;font-family:'JetBrains Mono',monospace;font-size:.6rem;
                 background:rgba(10,18,38,.95);color:rgba(180,210,255,.9);border:1px solid rgba(80,140,255,.3);
-                border-radius:3px;padding:4px 8px" onchange="hmtUpdate()">
+                border-radius:3px;padding:6px 8px;min-height:32px" onchange="hmtUpdate()">
                 <option value="256">256 (small)</option>
                 <option value="512">512 (standard)</option>
                 <option value="1024" selected>1024 (high detail)</option>
@@ -4004,8 +4019,8 @@ document.addEventListener('keydown', function(e){
             </div>
 
             <div style="display:flex;gap:12px;align-items:center">
-              <label style="font-family:'JetBrains Mono',monospace;font-size:.55rem;color:rgba(100,220,180,.7);letter-spacing:.07em;display:flex;align-items:center;gap:6px;cursor:pointer">
-                <input type="checkbox" id="hmt-invert" onchange="hmtUpdate()" style="accent-color:#64dcb4">
+              <label style="font-family:'JetBrains Mono',monospace;font-size:.55rem;color:rgba(100,220,180,.7);letter-spacing:.07em;display:flex;align-items:center;gap:8px;cursor:pointer;min-height:32px">
+                <input type="checkbox" id="hmt-invert" onchange="hmtUpdate()" style="accent-color:#64dcb4;width:16px;height:16px">
                 INVERT (dark=high)
               </label>
             </div>
@@ -4021,9 +4036,9 @@ document.addEventListener('keydown', function(e){
         </div>
 
         <!-- Output buttons -->
-        <div style="display:flex;gap:8px;padding:0 16px 16px;flex-wrap:wrap">
+        <div style="display:flex;gap:8px;padding:0 16px 16px;flex-wrap:wrap;align-items:center">
           <button onclick="hmtDownloadPNG()" style="font-family:'JetBrains Mono',monospace;font-size:.58rem;
-            padding:8px 18px;border-radius:3px;cursor:pointer;letter-spacing:.06em;
+            padding:10px 18px;border-radius:3px;cursor:pointer;letter-spacing:.06em;min-height:40px;
             border:1px solid rgba(100,220,180,.45);background:rgba(100,220,180,.1);color:rgba(100,220,180,.9)">
             ⬇ DOWNLOAD HEIGHTMAP PNG
           </button>

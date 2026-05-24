@@ -3117,3 +3117,12 @@ body {
   .img-action-btn { min-height: 44px; touch-action: manipulation; }
   .img-list-row   { min-height: 44px; }
 }
+/* ── Heightmap Tools Modal — mobile ─────────────────────────── */
+@media (max-width: 640px) {
+  #hmt-modal { padding: 0 0 16px; }
+  #hmt-modal > div { border-radius: 0 !important; }
+  .hmt-controls-grid { grid-template-columns: 1fr !important; }
+}
+@media (pointer: coarse) {
+  #hmt-overlay { cursor: default !important; }
+}
