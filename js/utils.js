@@ -704,9 +704,9 @@ function hmtDrawProfile() {
   ctx.setLineDash([]);
 }
 
-// ── Download as SFS heightmap PNG ─────────────────────────────
-function hmtDownloadPNG() {
-  if(!_hmtProfile) { alert('Load a bump map first.'); return; }
+// ── Build the SFS heightmap canvas ───────────────────────────
+function _hmtBuildCanvas() {
+  if(!_hmtProfile) return null;
   const outW = _hmtProfile.length;
   const outH = 512;
   const outC = document.createElement('canvas');
@@ -714,21 +714,71 @@ function hmtDownloadPNG() {
   const ctx  = outC.getContext('2d');
   const imgd = ctx.createImageData(outW, outH);
   const d    = imgd.data;
-
   for(let x = 0; x < outW; x++) {
     const frac = _hmtProfile[outW - x - 1];
-    // cutY: first canvas row (top-down) where terrain body starts; rows >= cutY are opaque
     const cutY = Math.round(outH * (1 - frac));
     for(let y = 0; y < outH; y++) {
       const idx = (y * outW + x) * 4;
-      d[idx] = d[idx+1] = d[idx+2] = 0;       // black body
-      d[idx+3] = y >= cutY ? 255 : 0;           // opaque below cutY, transparent above
+      d[idx] = d[idx+1] = d[idx+2] = 0;
+      d[idx+3] = y >= cutY ? 255 : 0;
     }
   }
-
   ctx.putImageData(imgd, 0, 0);
+  return outC;
+}
+
+// ── Resolve a unique asset name (auto-increment if taken) ─────
+function _hmtUniqueName(base) {
+  const existing = (typeof assets !== 'undefined' && assets.heightmaps) ? assets.heightmaps : [];
+  if(!existing.some(e => e.name === base + '.png')) return base;
+  let serial = 2;
+  while(existing.some(e => e.name === base + '_' + serial + '.png')) serial++;
+  return base + '_' + serial;
+}
+
+// ── Save to heightmap assets (auto-numbered, injects into HMAP) ─
+function hmtSaveToAssets() {
+  if(!_hmtProfile) { alert('Load a bump map first.'); return; }
+  const rawName = (document.getElementById('hmt-out-name').value || 'bumpmap_hm').trim().replace(/\.png$/i, '');
+  const uniqueName = _hmtUniqueName(rawName);
+  const pngName    = uniqueName + '.png';
+
+  const outC = _hmtBuildCanvas();
+  if(!outC) { alert('Failed to build heightmap.'); return; }
+  const dataUrl = outC.toDataURL('image/png');
+
+  // Convert to bytes for ZIP export
+  const b64     = dataUrl.split(',')[1];
+  const byteStr = atob(b64);
+  const bytes   = new Uint8Array(byteStr.length);
+  for(let i = 0; i < byteStr.length; i++) bytes[i] = byteStr.charCodeAt(i);
+
+  const entry = { name: pngName, url: dataUrl, type: 'image/png', bytes };
+
+  if(typeof assets !== 'undefined' && assets.heightmaps) assets.heightmaps.push(entry);
+  if(typeof injectCustomHeightmap === 'function') injectCustomHeightmap(pngName);
+  if(typeof renderAssetRow        === 'function') renderAssetRow(entry, 'heightmaps');
+
+  // Update name field to the unique name that was used
+  document.getElementById('hmt-out-name').value = uniqueName;
+
+  // Flash status
+  const status = document.getElementById('hmt-save-status');
+  status.textContent = '✓ Saved as ' + pngName;
+  status.style.display = 'block';
+  clearTimeout(status._t);
+  status._t = setTimeout(() => { status.style.display = 'none'; }, 3000);
+}
+
+// ── Download PNG directly ─────────────────────────────────────
+function hmtDownloadPNG() {
+  if(!_hmtProfile) { alert('Load a bump map first.'); return; }
+  const rawName    = (document.getElementById('hmt-out-name').value || 'bumpmap_hm').trim().replace(/\.png$/i, '');
+  const uniqueName = _hmtUniqueName(rawName);
+  const outC = _hmtBuildCanvas();
+  if(!outC) return;
   const link = document.createElement('a');
   link.href     = outC.toDataURL('image/png');
-  link.download = 'heightmap_bumpconvert.png';
+  link.download = uniqueName + '.png';
   link.click();
 }

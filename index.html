@@ -4036,16 +4036,31 @@ document.addEventListener('keydown', function(e){
             border:1px solid rgba(100,220,180,.15);border-radius:3px;background:rgba(4,8,20,.9)"></canvas>
         </div>
 
-        <!-- Output buttons -->
-        <div style="display:flex;gap:8px;padding:0 16px 16px;flex-wrap:wrap;align-items:center">
-          <button onclick="hmtDownloadPNG()" style="font-family:'JetBrains Mono',monospace;font-size:.58rem;
-            padding:10px 18px;border-radius:3px;cursor:pointer;letter-spacing:.06em;min-height:40px;
-            border:1px solid rgba(100,220,180,.45);background:rgba(100,220,180,.1);color:rgba(100,220,180,.9)">
-            ⬇ DOWNLOAD HEIGHTMAP PNG
-          </button>
-          <div style="font-family:'JetBrains Mono',monospace;font-size:.5rem;color:rgba(150,160,200,.45);
-            align-self:center;line-height:1.4">
-            RGBA silhouette format · ready to drop into HMAP tab
+        <!-- Output -->
+        <div style="padding:0 16px 16px;display:flex;flex-direction:column;gap:8px">
+          <!-- Name row -->
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <label style="font-family:'JetBrains Mono',monospace;font-size:.52rem;color:rgba(100,220,180,.7);letter-spacing:.07em;white-space:nowrap">OUTPUT NAME</label>
+            <input id="hmt-out-name" type="text" value="bumpmap_hm"
+              style="flex:1;min-width:120px;max-width:220px;font-family:'JetBrains Mono',monospace;font-size:.62rem;
+              background:rgba(10,18,38,.95);color:rgba(180,210,255,.9);border:1px solid rgba(80,140,255,.3);
+              border-radius:3px;padding:6px 10px;outline:none;min-height:32px">
+            <span style="font-family:'JetBrains Mono',monospace;font-size:.48rem;color:rgba(150,160,200,.4)">.png · auto-numbered if name taken</span>
+          </div>
+          <!-- Buttons row -->
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <button onclick="hmtSaveToAssets()" style="font-family:'JetBrains Mono',monospace;font-size:.58rem;
+              padding:10px 18px;border-radius:3px;cursor:pointer;letter-spacing:.06em;min-height:40px;
+              border:1px solid rgba(100,220,180,.45);background:rgba(100,220,180,.1);color:rgba(100,220,180,.9)">
+              ✚ SAVE TO HEIGHTMAP ASSETS
+            </button>
+            <button onclick="hmtDownloadPNG()" style="font-family:'JetBrains Mono',monospace;font-size:.58rem;
+              padding:10px 18px;border-radius:3px;cursor:pointer;letter-spacing:.06em;min-height:40px;
+              border:1px solid rgba(80,140,255,.35);background:rgba(80,140,255,.07);color:rgba(140,180,255,.8)">
+              ⬇ DOWNLOAD PNG
+            </button>
+            <div id="hmt-save-status" style="font-family:'JetBrains Mono',monospace;font-size:.5rem;
+              color:rgba(100,220,180,.7);align-self:center;line-height:1.4;display:none"></div>
           </div>
         </div>
 
