@@ -716,18 +716,13 @@ function hmtDownloadPNG() {
   const d    = imgd.data;
 
   for(let x = 0; x < outW; x++) {
-    const frac    = _hmtProfile[outW - x - 1];
-    const edgeRow = outH - 1 - Math.floor(frac * (outH - 1));
-    const alpha   = Math.round((frac * (outH - 1) - Math.floor(frac * (outH - 1))) * 255);
-
+    const frac = _hmtProfile[outW - x - 1];
+    // cutY: first canvas row (top-down) where terrain body starts; rows >= cutY are opaque
+    const cutY = Math.round(outH * (1 - frac));
     for(let y = 0; y < outH; y++) {
       const idx = (y * outW + x) * 4;
-      d[idx]     = 0;
-      d[idx + 1] = 0;
-      d[idx + 2] = 0;
-      if(y > edgeRow)      d[idx + 3] = 255;
-      else if(y === edgeRow) d[idx + 3] = alpha;
-      else                  d[idx + 3] = 0;
+      d[idx] = d[idx+1] = d[idx+2] = 0;       // black body
+      d[idx+3] = y >= cutY ? 255 : 0;           // opaque below cutY, transparent above
     }
   }
 
