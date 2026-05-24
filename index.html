@@ -1628,6 +1628,7 @@
 <script src="js/sfx.js?v=5.12"></script>
 <script src="js/utils.js?v=5.12"></script>
 <script src="js/images.js?v=5.12"></script>
+<script src="js/procgen.js?v=1.0"></script>
 <!-- ══ TERRAIN DETAIL DROPDOWN (body-level to escape topbar stacking context) ══ -->
 <div id="terrain-detail-dropdown" style="display:none;position:fixed;
   min-width:200px;background:rgba(6,10,22,.97);border:1px solid rgba(180,140,255,.25);
@@ -3172,6 +3173,15 @@ document.addEventListener('keydown', function(e){
     <span><span style="display:block;color:var(--sky2)">HEIGHTMAP TOOLS</span>
     <span style="display:block;font-size:.54rem;color:rgba(150,150,180,.6);margin-top:1px">Bump map → heightmap converter &amp; more</span></span>
   </button>
+  <button onclick="openProceduralGen()" style="display:flex;align-items:center;gap:10px;
+    width:100%;padding:9px 14px;background:none;border:none;cursor:pointer;
+    font-family:'JetBrains Mono',monospace;font-size:.62rem;color:rgba(220,220,255,.85);
+    letter-spacing:.05em;transition:background .12s;text-align:left"
+    onmouseover="this.style.background='var(--ac12)'" onmouseout="this.style.background='none'">
+    <span style="font-size:1rem">✨</span>
+    <span><span style="display:block;color:var(--sky2)">PROCEDURAL GENERATION</span>
+    <span style="display:block;font-size:.54rem;color:rgba(150,150,180,.6);margin-top:1px">Generate random systems with full control</span></span>
+  </button>
 </div>
 <input type="file" id="img-file-input" accept="image/*" multiple style="display:none">
 
@@ -4069,6 +4079,218 @@ document.addEventListener('keydown', function(e){
 
   </div><!-- #hmt-content -->
 </div><!-- #hmt-modal -->
+
+<!-- ══════════════ PROCEDURAL GENERATION MODAL ══════════════ -->
+<div id="procgen-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;
+  background:rgba(0,0,0,.88);z-index:99999;font-family:'JetBrains Mono',monospace;
+  flex-direction:column;align-items:stretch">
+
+  <!-- ── Outer container ── -->
+  <div style="display:flex;flex-direction:column;width:100%;height:100%;max-width:1600px;
+    margin:0 auto;background:rgba(4,8,20,.98);overflow:hidden">
+
+    <!-- ── Header ── -->
+    <div style="display:flex;align-items:center;justify-content:space-between;
+      padding:12px 18px;border-bottom:1px solid rgba(100,150,255,.15);flex-shrink:0">
+      <div>
+        <div style="font-family:'Orbitron',sans-serif;font-size:.72rem;letter-spacing:.18em;
+          color:var(--sky2)">✨ PROCEDURAL GENERATION</div>
+        <div style="font-size:.5rem;color:rgba(130,150,200,.5);letter-spacing:.04em;margin-top:3px">
+          Generate full planetary systems with complete control</div>
+      </div>
+      <button onclick="closeProceduralGen()" style="background:none;border:none;cursor:pointer;
+        color:rgba(180,180,210,.4);font-size:1.3rem;padding:4px 8px;line-height:1;transition:color .15s"
+        onmouseover="this.style.color='rgba(220,80,80,.8)'"
+        onmouseout="this.style.color='rgba(180,180,210,.4)'">✕</button>
+    </div>
+
+    <!-- ── Top row: Frequencies + Misc ── -->
+    <div class="pg-top-row" style="display:flex;gap:0;border-bottom:1px solid rgba(100,150,255,.1);
+      flex-shrink:0;min-height:0">
+
+      <!-- Object Type Frequencies -->
+      <div style="flex:1;padding:12px 14px;border-right:1px solid rgba(100,150,255,.1)">
+        <div class="pg-section-title">OBJECT TYPE FREQUENCIES</div>
+        <div style="font-size:.48rem;color:rgba(130,150,200,.45);margin-bottom:8px">
+          % of each body type out of selected types — e.g. 10% stars, 90% planets
+        </div>
+        <div id="pg-freq-controls" style="display:flex;flex-direction:column;gap:5px"></div>
+      </div>
+
+      <!-- Misc -->
+      <div style="flex:1;padding:12px 14px">
+        <div class="pg-section-title">MISC</div>
+        <div style="font-size:.48rem;color:rgba(130,150,200,.45);margin-bottom:8px">
+          Post-generation options and behaviors
+        </div>
+        <div id="pg-misc-options" style="display:flex;flex-direction:column;gap:6px"></div>
+      </div>
+    </div>
+
+    <!-- ── Middle row: Body Select | Map View | Fine Tuning ── -->
+    <div style="flex:1;display:flex;overflow:hidden;min-height:0">
+
+      <!-- Body Select (left) -->
+      <div class="pg-side-panel" style="width:170px;min-width:140px;border-right:1px solid rgba(100,150,255,.1);
+        overflow-y:auto;flex-shrink:0">
+        <div style="padding:12px 12px 8px">
+          <div class="pg-section-title">BODY SELECT</div>
+          <div style="font-size:.47rem;color:rgba(130,150,200,.45);margin-bottom:10px;line-height:1.5">
+            Select body types to include. Can mix multiple for completely random systems.
+          </div>
+          <div id="pg-body-type-grid" style="display:flex;flex-direction:column;gap:5px"></div>
+        </div>
+        <!-- Body info panel (shows when clicking on map) -->
+        <div id="pg-body-info" style="display:none;margin:10px 12px;padding:10px;
+          background:rgba(100,220,180,.06);border:1px solid rgba(100,220,180,.2);
+          border-radius:4px;font-size:.5rem;line-height:1.7;color:rgba(180,200,255,.85)"></div>
+      </div>
+
+      <!-- Map View (center) -->
+      <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative">
+        <div style="padding:8px 14px;border-bottom:1px solid rgba(100,150,255,.08);flex-shrink:0;
+          display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:.52rem;color:var(--sky2);letter-spacing:.1em">MAP VIEW</span>
+          <span style="font-size:.46rem;color:rgba(100,120,180,.4)">scroll/pinch to zoom · drag to pan · click body for info</span>
+        </div>
+        <div style="flex:1;position:relative;overflow:hidden">
+          <canvas id="pg-canvas" style="width:100%;height:100%;display:block;cursor:grab"></canvas>
+        </div>
+        <!-- Status bar -->
+        <div style="padding:8px 14px;border-top:1px solid rgba(100,150,255,.08);flex-shrink:0;
+          display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <button onclick="pgGenerate()" class="pg-btn pg-btn--primary">🎲 GENERATE SYSTEM</button>
+          <button onclick="pgApply()"    class="pg-btn pg-btn--apply">✅ APPLY TO SYSTEM</button>
+          <button onclick="pgClear()"    class="pg-btn pg-btn--danger">🗑 CLEAR</button>
+          <div id="pg-status" style="display:none;font-size:.52rem;margin-left:auto"></div>
+        </div>
+      </div>
+
+      <!-- Fine Tuning (right) -->
+      <div class="pg-side-panel" style="width:200px;min-width:160px;border-left:1px solid rgba(100,150,255,.1);
+        overflow-y:auto;flex-shrink:0">
+        <div style="padding:12px 12px 8px">
+          <div class="pg-section-title">FINE TUNING</div>
+          <div style="font-size:.47rem;color:rgba(130,150,200,.45);margin-bottom:10px;line-height:1.5">
+            Control orbit ranges, SOI, planet radius, eccentricity, and more.
+          </div>
+          <div id="pg-fine-tuning" style="display:flex;flex-direction:column;gap:10px"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Bottom row: Misc Selections | Generate | Texture Select ── -->
+    <div class="pg-bottom-row" style="display:flex;gap:0;border-top:1px solid rgba(100,150,255,.1);
+      flex-shrink:0">
+
+      <!-- Miscellaneous Selections -->
+      <div style="flex:1;padding:12px 14px;border-right:1px solid rgba(100,150,255,.1)">
+        <div class="pg-section-title">MISCELLANEOUS SELECTIONS</div>
+        <div style="font-size:.48rem;color:rgba(130,150,200,.45);margin-top:3px">
+          Heightmap, watermask, front clouds — coming soon
+        </div>
+      </div>
+
+      <!-- Center generate button area -->
+      <div style="display:flex;align-items:center;justify-content:center;padding:12px 20px;
+        border-right:1px solid rgba(100,150,255,.1)">
+        <button onclick="pgGenerate()" style="font-family:'JetBrains Mono',monospace;
+          font-size:.65rem;padding:14px 28px;border-radius:4px;cursor:pointer;letter-spacing:.1em;
+          border:1px solid rgba(100,220,180,.5);background:rgba(100,220,180,.14);
+          color:rgba(100,220,180,.95);font-weight:700;white-space:nowrap;
+          box-shadow:0 0 20px rgba(100,220,180,.08);transition:all .15s"
+          onmouseover="this.style.background='rgba(100,220,180,.22)'"
+          onmouseout="this.style.background='rgba(100,220,180,.14)'">
+          🎲 GENERATE
+        </button>
+      </div>
+
+      <!-- Texture Select -->
+      <div style="flex:1;padding:12px 14px">
+        <div class="pg-section-title">TEXTURE SELECT</div>
+        <div style="font-size:.48rem;color:rgba(130,150,200,.45);margin-top:3px">
+          Planet, Atmosphere, normal cloud textures — coming soon
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── Procgen CSS ── -->
+<style>
+/* Section titles */
+.pg-section-title {
+  font-size:.52rem;
+  color:rgba(100,220,180,.75);
+  letter-spacing:.1em;
+  margin-bottom:6px;
+  font-family:'Orbitron',sans-serif;
+}
+
+/* Body type buttons */
+.pg-body-btn {
+  display:flex;align-items:center;gap:8px;
+  padding:7px 10px;border-radius:4px;cursor:pointer;
+  border:1px solid rgba(100,150,255,.15);
+  background:rgba(10,16,40,.6);
+  transition:all .12s;user-select:none;
+  font-size:.54rem;color:rgba(160,180,220,.7);
+}
+.pg-body-btn:hover { background:rgba(100,150,255,.1); border-color:rgba(100,150,255,.3); }
+.pg-body-btn--on   { background:rgba(100,220,180,.1)!important; border-color:rgba(100,220,180,.45)!important; color:rgba(100,220,180,.95)!important; }
+.pg-body-icon { font-size:.85rem; }
+.pg-body-label{ flex:1; letter-spacing:.05em; }
+.pg-body-check{ font-size:.7rem; min-width:12px; }
+
+/* Frequency rows */
+.pg-freq-row {
+  display:flex;align-items:center;gap:7px;
+  font-size:.52rem;color:rgba(160,180,220,.8);
+}
+.pg-freq-icon  { font-size:.7rem; min-width:14px; }
+.pg-freq-name  { min-width:62px; }
+.pg-freq-slider{ flex:1;height:3px;cursor:pointer; }
+.pg-freq-pct   { min-width:32px;text-align:right;color:rgba(100,220,180,.8);font-size:.5rem; }
+
+/* Fine tuning */
+.pg-tune-row { }
+.pg-tune-label   { font-size:.5rem;color:rgba(140,160,210,.65);margin-bottom:3px;letter-spacing:.03em; }
+.pg-tune-controls{ display:flex;align-items:center;gap:7px; }
+.pg-tune-slider  { flex:1;height:3px;cursor:pointer;accent-color:#64dcb4; }
+.pg-tune-val     { min-width:30px;text-align:right;font-size:.5rem;color:rgba(100,220,180,.85); }
+
+/* Misc options */
+.pg-misc-row {
+  display:flex;align-items:center;gap:8px;cursor:pointer;
+  font-size:.52rem;color:rgba(160,180,220,.8);
+  padding:3px 0;
+}
+.pg-misc-row:hover { color:rgba(200,220,255,.95); }
+
+/* Action buttons */
+.pg-btn {
+  font-family:'JetBrains Mono',monospace;
+  font-size:.55rem;padding:8px 14px;border-radius:4px;cursor:pointer;
+  letter-spacing:.06em;border-width:1px;border-style:solid;transition:all .12s;
+}
+.pg-btn--primary { border-color:rgba(100,220,180,.45);background:rgba(100,220,180,.12);color:rgba(100,220,180,.95);font-weight:600; }
+.pg-btn--primary:hover { background:rgba(100,220,180,.2); }
+.pg-btn--apply   { border-color:rgba(80,140,255,.45);background:rgba(80,140,255,.1);color:rgba(120,180,255,.9); }
+.pg-btn--apply:hover { background:rgba(80,140,255,.2); }
+.pg-btn--danger  { border-color:rgba(255,80,80,.3);background:rgba(255,80,80,.07);color:rgba(255,130,130,.8); }
+.pg-btn--danger:hover { background:rgba(255,80,80,.15); }
+
+/* Responsive mobile layout */
+@media (max-width: 700px) {
+  .pg-top-row    { flex-direction:column; }
+  .pg-bottom-row { flex-direction:column; }
+  .pg-side-panel { width:100%!important;min-width:0!important;border-right:none!important;
+    border-left:none!important;border-bottom:1px solid rgba(100,150,255,.1); }
+  #procgen-modal > div { flex-direction:column; }
+  #procgen-modal > div > div:nth-child(3) { flex-direction:column; }
+}
+</style>
 
 </body>
 
