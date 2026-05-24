@@ -708,7 +708,7 @@ function hmtDrawProfile() {
 function hmtDownloadPNG() {
   if(!_hmtProfile) { alert('Load a bump map first.'); return; }
   const outW = _hmtProfile.length;
-  const outH = 256;
+  const outH = 512;
   const outC = document.createElement('canvas');
   outC.width = outW; outC.height = outH;
   const ctx  = outC.getContext('2d');
@@ -722,9 +722,9 @@ function hmtDownloadPNG() {
 
     for(let y = 0; y < outH; y++) {
       const idx = (y * outW + x) * 4;
-      d[idx]     = 200;
-      d[idx + 1] = 200;
-      d[idx + 2] = 200;
+      d[idx]     = 0;
+      d[idx + 1] = 0;
+      d[idx + 2] = 0;
       if(y > edgeRow)      d[idx + 3] = 255;
       else if(y === edgeRow) d[idx + 3] = alpha;
       else                  d[idx + 3] = 0;
