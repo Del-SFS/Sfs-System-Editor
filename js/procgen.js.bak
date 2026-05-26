@@ -7,21 +7,21 @@ const AU = 1.496e11;
 const PG = {
   types: {
     // Stars (by spectral class + special types)
-    star_O:           { label:'O-class Star',       icon:'⭐', enabled:false, weight:0,  color:'#a0c0ff', eccMax:0.05, soiScale:1.0, isStar:true, presetName:'O' },
-    star_B:           { label:'B-class Star',       icon:'⭐', enabled:false, weight:0,  color:'#b8d0ff', eccMax:0.05, soiScale:1.0, isStar:true, presetName:'B' },
-    star_A:           { label:'A-class Star',       icon:'⭐', enabled:false, weight:0,  color:'#d8e8ff', eccMax:0.05, soiScale:1.0, isStar:true, presetName:'A' },
-    star_F:           { label:'F-class Star',       icon:'⭐', enabled:false, weight:0,  color:'#f8f8ff', eccMax:0.05, soiScale:1.0, isStar:true, presetName:'F' },
-    star_G:           { label:'G-class Star (Sun)', icon:'⭐', enabled:true,  weight:20, color:'#ffd060', eccMax:0.05, soiScale:1.0, isStar:true, presetName:'Sun' },
-    star_K:           { label:'K-class Star',       icon:'⭐', enabled:false, weight:0,  color:'#ffb060', eccMax:0.05, soiScale:1.0, isStar:true, presetName:'K' },
-    star_M:           { label:'M-class Star',       icon:'⭐', enabled:false, weight:0,  color:'#ff8040', eccMax:0.05, soiScale:1.0, isStar:true, presetName:'M' },
-    star_blue_giant:  { label:'Blue Giant',         icon:'💠', enabled:false, weight:0,  color:'#6090ff', eccMax:0.05, soiScale:1.0, isStar:true, presetName:'Blue Giant' },
-    star_white_dwarf: { label:'White Dwarf',        icon:'⚪', enabled:false, weight:0,  color:'#e8e8ff', eccMax:0.05, soiScale:1.0, isStar:true, presetName:'White Dwarf' },
+    star_O:           { label:'O-class Star',       icon:'⭐', enabled:false, weight:0,  color:'#a0c0ff', eccMax:0.05, isStar:true, presetName:'O' },
+    star_B:           { label:'B-class Star',       icon:'⭐', enabled:false, weight:0,  color:'#b8d0ff', eccMax:0.05, isStar:true, presetName:'B' },
+    star_A:           { label:'A-class Star',       icon:'⭐', enabled:false, weight:0,  color:'#d8e8ff', eccMax:0.05, isStar:true, presetName:'A' },
+    star_F:           { label:'F-class Star',       icon:'⭐', enabled:false, weight:0,  color:'#f8f8ff', eccMax:0.05, isStar:true, presetName:'F' },
+    star_G:           { label:'G-class Star (Sun)', icon:'⭐', enabled:true,  weight:20, color:'#ffd060', eccMax:0.05, isStar:true, presetName:'Sun' },
+    star_K:           { label:'K-class Star',       icon:'⭐', enabled:false, weight:0,  color:'#ffb060', eccMax:0.05, isStar:true, presetName:'K' },
+    star_M:           { label:'M-class Star',       icon:'⭐', enabled:false, weight:0,  color:'#ff8040', eccMax:0.05, isStar:true, presetName:'M' },
+    star_blue_giant:  { label:'Blue Giant',         icon:'💠', enabled:false, weight:0,  color:'#6090ff', eccMax:0.05, isStar:true, presetName:'Blue Giant' },
+    star_white_dwarf: { label:'White Dwarf',        icon:'⚪', enabled:false, weight:0,  color:'#e8e8ff', eccMax:0.05, isStar:true, presetName:'White Dwarf' },
     // Regular bodies
-    planet:      { label:'Planets',      icon:'🌍', enabled:true,  weight:55, color:'#4488ff', eccMax:0.15, soiScale:1.0 },
-    moon:        { label:'Moons',        icon:'🌙', enabled:true,  weight:18, color:'#aaaaaa', eccMax:0.05, soiScale:1.0 },
-    asteroid:    { label:'Asteroids',    icon:'☄️', enabled:false, weight:0,  color:'#886644', eccMax:0.55, soiScale:0.3 },
-    brown_dwarf: { label:'Brown Dwarfs', icon:'🟤', enabled:false, weight:0,  color:'#cc6622', eccMax:0.10, soiScale:1.0 },
-    blackhole:   { label:'Black Holes',  icon:'⚫', enabled:false, weight:0,  color:'#8800ff', eccMax:0.05, soiScale:2.0 },
+    planet:      { label:'Planets',      icon:'🌍', enabled:true,  weight:55, color:'#4488ff', eccMax:0.15 },
+    moon:        { label:'Moons',        icon:'🌙', enabled:true,  weight:18, color:'#aaaaaa', eccMax:0.05 },
+    asteroid:    { label:'Asteroids',    icon:'☄️', enabled:false, weight:0,  color:'#886644', eccMax:0.55 },
+    brown_dwarf: { label:'Brown Dwarfs', icon:'🟤', enabled:false, weight:0,  color:'#cc6622', eccMax:0.10 },
+    blackhole:   { label:'Black Holes',  icon:'⚫', enabled:false, weight:0,  color:'#8800ff', eccMax:0.05 },
   },
   modes: {
     asteroid_cluster: { label:'Asteroid Cluster', enabled:false, weight:0 },
@@ -162,7 +162,6 @@ function pgBuildUI() {
   pgRenderFrequencyControls();
   pgRenderFineTuning();
   pgRenderMiscOptions();
-  pgRenderSOIByType();
 }
 
 function pgRenderBodyTypeGrid() {
@@ -354,28 +353,6 @@ function pgSetTypeEcc(key, val) {
   PG.types[key].eccMax = parseFloat(val) || 0;
 }
 
-function pgSetTypeSOI(key, val) {
-  PG.types[key].soiScale = Math.max(0.01, parseFloat(val) || 1.0);
-}
-
-function pgRenderSOIByType() {
-  const container = document.getElementById('pg-soi-by-type');
-  if (!container) return;
-  container.innerHTML = Object.entries(PG.types).map(([key, t]) => `
-    <div>
-      <div class="pg-tune-label" style="display:flex;align-items:center;gap:5px">
-        <span>${t.icon}</span><span>${t.label} SOI Scale</span>
-      </div>
-      <div class="pg-tune-controls">
-        <input type="range" class="pg-freq-slider" min="0.01" max="4" step="0.01"
-          value="${t.soiScale ?? 1.0}"
-          oninput="pgSetTypeSOI('${key}',this.value);document.getElementById('pg-soi-type-val-${key}').textContent=parseFloat(this.value).toFixed(2)+'×'"
-          style="accent-color:${t.color}">
-        <span id="pg-soi-type-val-${key}" style="min-width:40px;text-align:right;color:rgba(100,220,180,.88);font-size:.75rem">${(t.soiScale ?? 1.0).toFixed(2)}×</span>
-      </div>
-    </div>`).join('');
-}
-
 function pgSetTune(key, val) {
   PG.tune[key].val = parseFloat(val) || 0;
 }
@@ -565,23 +542,23 @@ async function pgGenerate() {
       
       if (chosenKind === 'mode' && chosen === 'asteroid_cluster') {
         // Generate asteroid cluster: 5-15 asteroids in a tight band
-        const clusterCount = 5 + Math.floor(_pgRand() * 11);
+        const clusterCount = 5 + Math.floor(Math.random() * 11);
         const clusterOrbit = orbitMin + spacing * i;
         const clusterWidth = spacing * 0.3;
         for (let c = 0; c < clusterCount; c++) {
           const preset = pgPickPreset('asteroid');
           if (!preset) continue;
-          const sma    = clusterOrbit + (_pgRand() - 0.5) * clusterWidth;
-          const ecc    = _pgRand() * 0.3;
+          const sma    = clusterOrbit + (Math.random() - 0.5) * clusterWidth;
+          const ecc    = Math.random() * 0.3;
           const name   = NameGen.generate();
-          const radius = (preset.data.BASE_DATA?.radius || 50000) * (0.2 + _pgRand() * 0.6);
+          const radius = (preset.data.BASE_DATA?.radius || 50000) * (0.2 + Math.random() * 0.6);
           const body = {
             name, type: 'asteroid', preset, isCenter: false,
             parent: centerName, orbitSMA: sma, orbitEcc: ecc,
-            orbitDir: _pgRand() > 0.1 ? 1 : -1,
-            orbitAoP: _pgRand() * 360,
+            orbitDir: Math.random() > 0.1 ? 1 : -1,
+            orbitAoP: Math.random() * 360,
             radius, color: '#886644', icon: '☄️',
-            _angle: _pgRand() * Math.PI * 2, children: [],
+            _angle: Math.random() * Math.PI * 2, children: [],
           };
           center.children.push(body);
         }
@@ -592,20 +569,20 @@ async function pgGenerate() {
         // Star cluster: pick a random enabled star type
         const starChoices = pickPool.filter(([,t]) => t.isStar);
         if (!starChoices.length) continue;
-        const starType = starChoices[Math.floor(_pgRand() * starChoices.length)][0];
+        const starType = starChoices[Math.floor(Math.random() * starChoices.length)][0];
         const preset = pgPickPreset(starType);
         if (!preset) continue;
         const sma  = orbitMin + spacing * i;
-        const ecc  = _pgRand() * 0.05;
+        const ecc  = Math.random() * 0.05;
         const name = NameGen.generate();
         const radius = (preset.data.BASE_DATA?.radius || 34817000) * PG.tune.radiusScale.val;
         const body = {
           name, type: starType, preset, isCenter: false,
           parent: centerName, orbitSMA: sma, orbitEcc: ecc,
-          orbitDir: 1, orbitAoP: _pgRand() * 360,
+          orbitDir: 1, orbitAoP: Math.random() * 360,
           radius, color: PG.types[starType]?.color || '#ffd060',
           icon: PG.types[starType]?.icon || '⭐',
-          _angle: _pgRand() * Math.PI * 2, children: [],
+          _angle: Math.random() * Math.PI * 2, children: [],
         };
         center.children.push(body);
         continue;
@@ -617,10 +594,10 @@ async function pgGenerate() {
       if (!preset) continue;
 
       const baseSma    = orbitMin + spacing * i;
-      const jitter     = spacing * (0.4 * _pgRand() - 0.2);
+      const jitter     = spacing * (0.4 * Math.random() - 0.2);
       const sma        = Math.max(safeClearance, Math.min(orbitMax, baseSma + jitter));
       const typeEccMax = Math.min(PG.types[type]?.eccMax ?? 0.15, PG.tune.eccentricity.val);
-      const ecc        = _pgRand() * typeEccMax;
+      const ecc        = Math.random() * typeEccMax;
       const name       = NameGen.generate();
       const radius     = (preset.data.BASE_DATA?.radius || 600000) * PG.tune.radiusScale.val;
 
@@ -634,19 +611,19 @@ async function pgGenerate() {
         parent:   centerName,
         orbitSMA: sma,
         orbitEcc: ecc,
-        orbitDir: _pgRand() > 0.1 ? 1 : -1,
-        orbitAoP: _pgRand() * 360,
+        orbitDir: Math.random() > 0.1 ? 1 : -1,
+        orbitAoP: Math.random() * 360,
         radius,
         color: PG.types[type]?.color || '#aaaaaa',
         icon:  PG.types[type]?.icon  || '🌍',
-        _angle: _pgRand() * Math.PI * 2,
+        _angle: Math.random() * Math.PI * 2,
         children: [],
       };
 
-      if (PG.misc.addMoons && (type === 'planet' || type === 'gasgiant') && _pgRand() > 0.5) {
+      if (PG.misc.addMoons && (type === 'planet' || type === 'gasgiant') && Math.random() > 0.5) {
         const moonPreset = pgPickPreset('moon');
         if (moonPreset) {
-          const moonCount  = Math.floor(_pgRand() * 3) + 1;
+          const moonCount  = Math.floor(Math.random() * 3) + 1;
           const moonEccMax = PG.types['moon']?.eccMax ?? 0.05;
           for (let m = 0; m < moonCount; m++) {
             const moon = {
@@ -654,14 +631,14 @@ async function pgGenerate() {
               type:     'moon',
               parent:   name,
               preset:   moonPreset,
-              orbitSMA: radius * (8 + m * 6 + _pgRand() * 3),
-              orbitEcc: _pgRand() * moonEccMax,
-              orbitAoP: _pgRand() * 360,
+              orbitSMA: radius * (8 + m * 6 + Math.random() * 3),
+              orbitEcc: Math.random() * moonEccMax,
+              orbitAoP: Math.random() * 360,
               orbitDir: 1,
               radius:   (moonPreset.data?.BASE_DATA?.radius || 300000) * 0.3,
               color:    '#999999',
               icon:     '🌙',
-              _angle:   _pgRand() * Math.PI * 2,
+              _angle:   Math.random() * Math.PI * 2,
               children: [],
             };
             body.children.push(moon);
@@ -682,12 +659,6 @@ async function pgGenerate() {
     if (i < count) {
       setTimeout(_chunk, 0);
     } else {
-      // Save the recorded random sequence for future seed-lock replays
-      if (_pgRngRecord) {
-        _pgSavedSeed = _pgRngRecord.slice();
-        _pgRngRecord = null;
-      }
-
       // Compute gap-based SOI multipliers
       const cGrav    = center.preset.data.BASE_DATA?.gravity || 274;
       const cR       = center.radius;
@@ -709,7 +680,7 @@ async function pgGenerate() {
 }
 
 // ── SOI multiplier calculation ────────────────────────────────
-const _PG_SOI_FILL    = 0.45;  // fallback defaults (not used when dynamic vars are set)
+const _PG_SOI_FILL    = 0.45;
 const _PG_SOI_MIN_R   = 4.0;
 const _PG_SOI_MAX_R   = 0.45;
 const _PG_SOI_MULT_MIN = 0.05;
@@ -717,20 +688,13 @@ const _PG_SOI_MULT_MAX = 20.0;
 
 function _pgComputeSOIMultipliers(list, parentGrav, parentR) {
   if (!list.length) return;
-
-  // Read dynamic SOI settings (set by sliders) or fall back to defaults
-  const soiFill  = (typeof _PG_SOI_FILL_DYN  !== 'undefined') ? _PG_SOI_FILL_DYN  : _PG_SOI_FILL;
-  const soiMinR  = (typeof _PG_SOI_MIN_R_DYN  !== 'undefined') ? _PG_SOI_MIN_R_DYN  : _PG_SOI_MIN_R;
-  const soiMaxR  = (typeof _PG_SOI_MAX_R_DYN  !== 'undefined') ? _PG_SOI_MAX_R_DYN  : _PG_SOI_MAX_R;
-  const globalMult = (typeof _pgSOIGlobal !== 'undefined') ? _pgSOIGlobal : 1.0;
-
   const sorted = list.slice().sort((a, b) => a.orbitSMA - b.orbitSMA);
   const n = sorted.length;
 
   for (let i = 0; i < n; i++) {
     const body = sorted[i];
     const sma  = body.orbitSMA;
-    if (!sma || sma <= 0) { body.soiMultiplier = 1.0 * globalMult; continue; }
+    if (!sma || sma <= 0) { body.soiMultiplier = 1.0; continue; }
 
     const innerBody = sorted[i - 1];
     const outerBody = sorted[i + 1];
@@ -741,17 +705,16 @@ function _pgComputeSOIMultipliers(list, parentGrav, parentR) {
     const innerGap  = Math.max(0, periapsis - innerEdge);
     const outerGap  = Math.max(0, outerEdge - apoapsis);
 
-    const gapSOI    = Math.min(innerGap, outerGap) * soiFill;
-    const minSOI    = body.radius * soiMinR;
-    const maxSOI    = sma * soiMaxR;
+    const gapSOI    = Math.min(innerGap, outerGap) * _PG_SOI_FILL;
+    const minSOI    = body.radius * _PG_SOI_MIN_R;
+    const maxSOI    = sma * _PG_SOI_MAX_R;
     const targetSOI = Math.max(minSOI, Math.min(maxSOI, gapSOI > 0 ? gapSOI : minSOI));
 
     const bodyGrav  = body.preset?.data?.BASE_DATA?.gravity || 9.8;
     const massRatio = (bodyGrav * body.radius * body.radius) / (parentGrav * parentR * parentR);
     const rawHill   = sma * Math.pow(Math.max(massRatio, 1e-12), 0.4);
     const mult      = rawHill > 0 ? targetSOI / rawHill : 1.0;
-    const typeSoiScale = PG.types[body.type]?.soiScale ?? 1.0;
-    body.soiMultiplier = Math.max(_PG_SOI_MULT_MIN, Math.min(_PG_SOI_MULT_MAX, mult * globalMult * typeSoiScale));
+    body.soiMultiplier = Math.max(_PG_SOI_MULT_MIN, Math.min(_PG_SOI_MULT_MAX, mult));
   }
 }
 
@@ -783,12 +746,12 @@ function pgPickPreset(type) {
   const matches = all.filter(p => ids.includes(p.id));
   // Always return something — fall back to full pool if no type match
   const pool    = matches.length ? matches : all;
-  return pool[Math.floor(_pgRand() * pool.length)];
+  return pool[Math.floor(Math.random() * pool.length)];
 }
 
 function pgWeightedPick(pairs) {
   const total = pairs.reduce((s, [,w]) => s + w, 0);
-  let r = _pgRand() * total;
+  let r = Math.random() * total;
   for (const [k, w] of pairs) { r -= w; if (r <= 0) return k; }
   return pairs[pairs.length - 1][0];
 }
@@ -800,7 +763,7 @@ function pgWeightedPickWithKind(triples) {
     const last = triples[triples.length - 1];
     return [last[0], last[1], last[2]];
   }
-  let r = _pgRand() * total;
+  let r = Math.random() * total;
   for (const [k, w, kind] of triples) {
     r -= (w || 0);
     if (r <= 0) return [k, w, kind];
@@ -987,13 +950,6 @@ function pgClear() {
   PG.preview.center  = null;
   PG.canvas.selected = null;
   PG.canvas.hovered  = null;
-  // Unlock seed and clear saved seed so next GEN starts fresh
-  _pgSeedLocked = false;
-  _pgSavedSeed  = null;
-  _pgRngPool    = null;
-  _pgRngRecord  = null;
-  const btn = document.getElementById('pg-seed-lock-btn');
-  if (btn) { btn.textContent = '🔓 SEED'; btn.classList.remove('seed-locked'); }
   pgShowStatus('', '');
 }
 

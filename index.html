@@ -10,7 +10,7 @@
 
 <canvas id="bg"></canvas>
 
-<!-- ══════════════ START MENU ════════════ -->
+<!-- ══════════════ START MENU ══════════════ -->
 <div class="screen" id="s-start">
   <div class="logo-wrap">
     <h1 class="logo-main">SFS <em>SYSTEM</em><br>EDITOR</h1>
@@ -4044,6 +4044,17 @@ document.addEventListener('keydown', function(e){
               </div>
             </div>
 
+            <div>
+              <label style="font-family:'JetBrains Mono',monospace;font-size:.55rem;color:rgba(100,220,180,.7);letter-spacing:.07em;display:block;margin-bottom:4px">
+                OUTPUT HEIGHT (ROWS)
+              </label>
+              <input type="number" id="hmt-height" value="512" min="1" step="1"
+                style="width:100%;font-family:'JetBrains Mono',monospace;font-size:.6rem;
+                background:rgba(10,18,38,.95);color:rgba(180,210,255,.9);border:1px solid rgba(80,140,255,.3);
+                border-radius:3px;padding:6px 10px;outline:none;min-height:32px;box-sizing:border-box"
+                oninput="hmtUpdate()">
+            </div>
+
             <div style="display:flex;gap:12px;align-items:center">
               <label style="font-family:'JetBrains Mono',monospace;font-size:.55rem;color:rgba(100,220,180,.7);letter-spacing:.07em;display:flex;align-items:center;gap:8px;cursor:pointer;min-height:32px">
                 <input type="checkbox" id="hmt-invert" onchange="hmtUpdate()" style="accent-color:#64dcb4;width:16px;height:16px">
@@ -4114,6 +4125,7 @@ document.addEventListener('keydown', function(e){
       <div style="display:flex;flex-direction:column;gap:2px">
         <label style="font-size:.55rem;color:rgba(120,150,210,.6);letter-spacing:.06em">ORBIT AROUND</label>
         <select id="pg-center-sel"
+          onchange="pgGenerate()"
           style="background:rgba(8,14,36,.95);border:1px solid rgba(100,150,255,.3);border-radius:5px;
             color:rgba(180,200,255,.9);font-family:'JetBrains Mono',monospace;font-size:.68rem;
             padding:5px 8px;cursor:pointer;min-width:120px">
@@ -4121,6 +4133,7 @@ document.addEventListener('keydown', function(e){
         </select>
       </div>
       <button onclick="pgGenerate()" class="pg-btn pg-btn--primary">🎲 GEN</button>
+      <button id="pg-seed-lock-btn" class="pg-btn pg-btn--seed" onclick="pgToggleSeedLock()" title="Lock seed — regenerate with same body layout but updated settings">🔓 SEED</button>
       <button onclick="pgClear()"    class="pg-btn pg-btn--danger">🗑</button>
       <button onclick="closeProceduralGen()"
         style="background:none;border:none;cursor:pointer;color:rgba(180,180,210,.4);
@@ -4142,6 +4155,7 @@ document.addEventListener('keydown', function(e){
       <button class="pg-tab on" onclick="pgSwitchTab('types',this)">TYPES</button>
       <button class="pg-tab"    onclick="pgSwitchTab('freq',this)">FREQ</button>
       <button class="pg-tab"    onclick="pgSwitchTab('tune',this)">TUNE</button>
+      <button class="pg-tab"    onclick="pgSwitchTab('soi',this)">SOI</button>
       <button class="pg-tab"    onclick="pgSwitchTab('options',this)">OPTIONS</button>
     </div>
 
@@ -4170,6 +4184,82 @@ document.addEventListener('keydown', function(e){
       <div style="margin-top:16px">
         <div class="pg-section-title" style="margin-bottom:10px">ECCENTRICITY BY TYPE</div>
         <div id="pg-ecc-by-type" style="display:flex;flex-direction:column;gap:12px"></div>
+      </div>
+    </div>
+
+    <!-- Tab: SOI -->
+    <div class="pg-tab-panel" id="pg-tabp-soi">
+      <div class="pg-section-title">SPHERE OF INFLUENCE</div>
+      <div class="pg-hint">Scale how large each body's gravity well is</div>
+      <div style="display:flex;flex-direction:column;gap:18px;margin-top:16px">
+
+        <div>
+          <div class="pg-tune-label" style="display:flex;justify-content:space-between">
+            <span>Global SOI Multiplier</span>
+            <span id="pg-soi-global-val" style="color:rgba(100,220,180,.9)">1.00×</span>
+          </div>
+          <input type="range" id="pg-soi-global" min="0.05" max="3" step="0.05" value="1"
+            style="width:100%;accent-color:#64dcb4;margin-top:6px"
+            oninput="pgSetSOIGlobal(this.value)">
+          <div style="font-size:.6rem;color:rgba(120,140,190,.45);margin-top:5px;line-height:1.5">
+            Scales the computed <code style="color:rgba(100,220,180,.6)">multiplierSOI</code> of every body. Values below 1 shrink SOIs — useful when planets are tightly packed.
+          </div>
+        </div>
+
+        <div style="border-top:1px solid rgba(100,150,255,.1);padding-top:16px">
+          <div class="pg-tune-label" style="display:flex;justify-content:space-between">
+            <span>Gap Fill Factor</span>
+            <span id="pg-soi-fill-val" style="color:rgba(100,220,180,.9)">0.45</span>
+          </div>
+          <input type="range" id="pg-soi-fill" min="0.05" max="0.9" step="0.05" value="0.45"
+            style="width:100%;accent-color:#64dcb4;margin-top:6px"
+            oninput="pgSetSOIFill(this.value)">
+          <div style="font-size:.6rem;color:rgba(120,140,190,.45);margin-top:5px;line-height:1.5">
+            Fraction of the orbital gap that the SOI may occupy. Lower = smaller SOIs relative to spacing.
+          </div>
+        </div>
+
+        <div style="border-top:1px solid rgba(100,150,255,.1);padding-top:16px">
+          <div class="pg-tune-label" style="display:flex;justify-content:space-between">
+            <span>Min SOI Radius (× body radius)</span>
+            <span id="pg-soi-minr-val" style="color:rgba(100,220,180,.9)">4.0×</span>
+          </div>
+          <input type="range" id="pg-soi-minr" min="1" max="20" step="0.5" value="4"
+            style="width:100%;accent-color:#64dcb4;margin-top:6px"
+            oninput="pgSetSOIMinR(this.value)">
+          <div style="font-size:.6rem;color:rgba(120,140,190,.45);margin-top:5px;line-height:1.5">
+            SOI is always at least this many body-radii wide. Prevents tiny, unenterable SOIs.
+          </div>
+        </div>
+
+        <div style="border-top:1px solid rgba(100,150,255,.1);padding-top:16px">
+          <div class="pg-tune-label" style="display:flex;justify-content:space-between">
+            <span>Max SOI (fraction of SMA)</span>
+            <span id="pg-soi-maxr-val" style="color:rgba(100,220,180,.9)">0.45</span>
+          </div>
+          <input type="range" id="pg-soi-maxr" min="0.05" max="0.9" step="0.05" value="0.45"
+            style="width:100%;accent-color:#64dcb4;margin-top:6px"
+            oninput="pgSetSOIMaxR(this.value)">
+          <div style="font-size:.6rem;color:rgba(120,140,190,.45);margin-top:5px;line-height:1.5">
+            SOI is capped at this fraction of the body's semi-major axis. Prevents overlapping SOIs.
+          </div>
+        </div>
+
+        <div style="border-top:1px solid rgba(100,220,180,.12);padding-top:16px;margin-top:4px">
+          <div class="pg-section-title" style="margin-bottom:4px">SOI SCALE BY TYPE</div>
+          <div class="pg-hint" style="margin-bottom:14px">Per-type multiplier applied on top of the global scale</div>
+          <div id="pg-soi-by-type" style="display:flex;flex-direction:column;gap:12px"></div>
+        </div>
+
+        <div style="border-top:1px solid rgba(100,150,255,.1);padding-top:14px;
+          background:rgba(100,220,180,.04);border-radius:5px;padding:12px 14px;
+          border:1px solid rgba(100,220,180,.12)">
+          <div style="font-size:.65rem;color:rgba(100,220,180,.7);letter-spacing:.06em;margin-bottom:6px">💡 TIP</div>
+          <div style="font-size:.62rem;color:rgba(140,160,210,.65);line-height:1.6">
+            Enable <strong style="color:rgba(210,160,255,.8)">🔓 SEED LOCK</strong> in the header, then adjust these sliders and hit <strong style="color:rgba(100,220,180,.8)">🎲 GEN</strong> — the same orbital layout is regenerated with new SOI values applied.
+          </div>
+        </div>
+
       </div>
     </div>
 
@@ -4271,20 +4361,30 @@ document.addEventListener('keydown', function(e){
   display: flex;
   border-bottom: 1px solid rgba(100,150,255,.15);
   flex-shrink: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  scroll-behavior: smooth;
 }
+.pg-panel-tabs::-webkit-scrollbar { display: none; }
 .pg-tab {
-  flex: 1; padding: 11px 6px;
+  flex: 0 0 auto; padding: 11px 14px;
   font-family: 'JetBrains Mono', monospace;
   font-size: .7rem; letter-spacing: .06em;
   background: none; border: none; cursor: pointer;
   color: rgba(120,140,200,.6);
   border-bottom: 2px solid transparent;
-  transition: all .14s;
+  transition: all .14s; white-space: nowrap;
 }
-.pg-tab:hover { color: rgba(160,185,255,.9); }
+.pg-tab:hover {
+  color: rgba(160,185,255,.9);
+  background: rgba(100,150,255,.06);
+}
 .pg-tab.on {
   color: rgba(100,220,180,.98);
   border-bottom-color: rgba(100,220,180,.65);
+  background: rgba(100,220,180,.05);
 }
 
 /* ── Tab panels ── */
@@ -4375,14 +4475,70 @@ document.addEventListener('keydown', function(e){
   font-family: 'JetBrains Mono', monospace;
   font-size: .78rem; padding: 10px 16px; border-radius: 5px; cursor: pointer;
   letter-spacing: .06em; border-width: 1px; border-style: solid;
-  transition: all .12s; font-weight: 600;
+  transition: all .15s; font-weight: 600;
+  position: relative; overflow: hidden;
 }
-.pg-btn--primary { border-color: rgba(100,220,180,.55); background: rgba(100,220,180,.14); color: rgba(100,220,180,.98); }
-.pg-btn--primary:hover { background: rgba(100,220,180,.24); }
-.pg-btn--apply   { border-color: rgba(80,140,255,.55); background: rgba(80,140,255,.12); color: rgba(130,185,255,.95); }
-.pg-btn--apply:hover { background: rgba(80,140,255,.24); }
-.pg-btn--danger  { border-color: rgba(255,80,80,.35); background: rgba(255,80,80,.08); color: rgba(255,130,130,.88); }
-.pg-btn--danger:hover { background: rgba(255,80,80,.18); }
+.pg-btn::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,.07) 0%, transparent 60%);
+  pointer-events: none;
+}
+.pg-btn--primary {
+  border-color: rgba(100,220,180,.55);
+  background: linear-gradient(135deg, rgba(100,220,180,.22) 0%, rgba(60,180,140,.1) 100%);
+  color: rgba(100,220,180,.98);
+  box-shadow: 0 0 8px rgba(100,220,180,.12), inset 0 1px 0 rgba(100,220,180,.15);
+}
+.pg-btn--primary:hover {
+  background: linear-gradient(135deg, rgba(100,220,180,.34) 0%, rgba(60,180,140,.18) 100%);
+  box-shadow: 0 0 14px rgba(100,220,180,.25), inset 0 1px 0 rgba(100,220,180,.2);
+  border-color: rgba(100,220,180,.8);
+}
+.pg-btn--apply {
+  border-color: rgba(80,140,255,.55);
+  background: linear-gradient(135deg, rgba(80,140,255,.18) 0%, rgba(50,100,220,.08) 100%);
+  color: rgba(130,185,255,.95);
+  box-shadow: 0 0 8px rgba(80,140,255,.1), inset 0 1px 0 rgba(80,140,255,.12);
+}
+.pg-btn--apply:hover {
+  background: linear-gradient(135deg, rgba(80,140,255,.3) 0%, rgba(50,100,220,.15) 100%);
+  box-shadow: 0 0 14px rgba(80,140,255,.22), inset 0 1px 0 rgba(80,140,255,.18);
+  border-color: rgba(80,140,255,.8);
+}
+.pg-btn--danger {
+  border-color: rgba(255,80,80,.35);
+  background: linear-gradient(135deg, rgba(255,80,80,.12) 0%, rgba(200,40,40,.05) 100%);
+  color: rgba(255,130,130,.88);
+  box-shadow: 0 0 6px rgba(255,80,80,.08);
+}
+.pg-btn--danger:hover {
+  background: linear-gradient(135deg, rgba(255,80,80,.24) 0%, rgba(200,40,40,.12) 100%);
+  box-shadow: 0 0 12px rgba(255,80,80,.2);
+  border-color: rgba(255,80,80,.65);
+}
+.pg-btn--seed {
+  border-color: rgba(200,140,255,.45);
+  background: linear-gradient(135deg, rgba(180,100,255,.15) 0%, rgba(140,60,220,.07) 100%);
+  color: rgba(210,160,255,.9);
+  box-shadow: 0 0 6px rgba(180,100,255,.08);
+  font-size: .72rem; padding: 8px 12px;
+}
+.pg-btn--seed:hover {
+  background: linear-gradient(135deg, rgba(180,100,255,.26) 0%, rgba(140,60,220,.14) 100%);
+  border-color: rgba(200,140,255,.75);
+  box-shadow: 0 0 12px rgba(180,100,255,.2);
+}
+.pg-btn--seed.seed-locked {
+  border-color: rgba(255,200,80,.55);
+  background: linear-gradient(135deg, rgba(255,180,40,.18) 0%, rgba(200,130,20,.08) 100%);
+  color: rgba(255,210,100,.95);
+  box-shadow: 0 0 8px rgba(255,180,40,.18);
+}
+.pg-btn--seed.seed-locked:hover {
+  background: linear-gradient(135deg, rgba(255,180,40,.28) 0%, rgba(200,130,20,.14) 100%);
+  border-color: rgba(255,200,80,.8);
+  box-shadow: 0 0 14px rgba(255,180,40,.28);
+}
 
 /* ── Mobile: right-side drawer, full height, narrower ── */
 @media (max-width: 700px) {
