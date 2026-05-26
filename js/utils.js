@@ -520,6 +520,13 @@ function _hmtLatAtCol(i, outW) {
 }
 
 // ── Main update ───────────────────────────────────────────────
+function hmtOnWidthInput() {
+  const warn = document.getElementById('hmt-width-warn');
+  const w = parseInt(document.getElementById('hmt-width').value) || 0;
+  if(warn) warn.style.display = (w > 4096) ? 'block' : 'none';
+  hmtUpdate();
+}
+
 function hmtUpdate() {
   if(!_hmtBmpPx) return;
 
@@ -527,18 +534,24 @@ function hmtUpdate() {
   const scale     = parseFloat(document.getElementById('hmt-scale').value);
   const smooth    = parseInt(document.getElementById('hmt-smooth').value);
   const invert    = document.getElementById('hmt-invert').checked;
-  const outW      = parseInt(document.getElementById('hmt-width').value);
+  const outW      = Math.max(1, parseInt(document.getElementById('hmt-width').value) || 1024);
+  const vshift    = parseInt(document.getElementById('hmt-vshift').value) || 0;
 
   // Update labels
   document.getElementById('hmt-lon-val').textContent    = Math.round(lonOff * 360) + '°';
   document.getElementById('hmt-scale-val').textContent  = scale.toFixed(2) + '×';
   document.getElementById('hmt-smooth-val').textContent = smooth;
+  document.getElementById('hmt-vshift-val').textContent = vshift;
+  // Keep lag warning in sync when hmtUpdate is called from other paths
+  const warn = document.getElementById('hmt-width-warn');
+  if(warn) warn.style.display = (outW > 4096) ? 'block' : 'none';
 
   const raw = new Float32Array(outW);
   for(let i = 0; i < outW; i++) {
-    // Per-column latitude from breakpoint path
+    // Per-column latitude from breakpoint path, offset by V shift (clamped to image bounds)
     const latFrac = _hmtLatAtCol(i, outW);
-    const rowF  = latFrac * (_hmtBmpH - 1);
+    const rowFBase = latFrac * (_hmtBmpH - 1) + vshift;
+    const rowF  = Math.max(0, Math.min(_hmtBmpH - 1, rowFBase));
     const row0  = Math.floor(rowF);
     const row1  = Math.min(row0 + 1, _hmtBmpH - 1);
     const rowT  = rowF - row0;
@@ -704,82 +717,34 @@ function hmtDrawProfile() {
   ctx.setLineDash([]);
 }
 
+const _HMT_CHUNK = 512;    // columns per ImageData chunk — keeps memory bounded for 8K outputs
+
 // ── Build the SFS heightmap canvas ───────────────────────────
-// ── Loading overlay helpers ───────────────────────────────────
-function _hmtShowLoading(msg) {
-  let ov = document.getElementById('hmt-loading-overlay');
-  if(!ov) {
-    ov = document.createElement('div');
-    ov.id = 'hmt-loading-overlay';
-    ov.style.cssText = [
-      'position:fixed','inset:0','z-index:99999',
-      'background:rgba(4,8,20,.88)',
-      'display:flex','flex-direction:column',
-      'align-items:center','justify-content:center','gap:18px',
-      'font-family:\'JetBrains Mono\',monospace'
-    ].join(';');
-    ov.innerHTML = `
-      <div style="color:rgba(100,220,180,.95);font-size:.72rem;letter-spacing:.12em" id="hmt-load-msg">GENERATING…</div>
-      <div style="width:260px;height:6px;background:rgba(80,140,255,.15);border-radius:3px;overflow:hidden">
-        <div id="hmt-load-bar" style="height:100%;width:0%;background:rgba(100,220,180,.8);border-radius:3px;transition:width .1s linear"></div>
-      </div>
-      <div style="color:rgba(150,160,200,.5);font-size:.52rem" id="hmt-load-sub">please wait</div>
-    `;
-    document.body.appendChild(ov);
-  }
-  document.getElementById('hmt-load-msg').textContent = msg || 'GENERATING…';
-  document.getElementById('hmt-load-bar').style.width = '0%';
-  document.getElementById('hmt-load-sub').textContent = 'please wait';
-  ov.style.display = 'flex';
-}
-function _hmtUpdateLoading(pct, sub) {
-  const bar = document.getElementById('hmt-load-bar');
-  const sub_el = document.getElementById('hmt-load-sub');
-  if(bar) bar.style.width = Math.round(pct) + '%';
-  if(sub_el && sub) sub_el.textContent = sub;
-}
-function _hmtHideLoading() {
-  const ov = document.getElementById('hmt-loading-overlay');
-  if(ov) ov.style.display = 'none';
-}
-
-// ── Async chunked canvas builder (safe for 8k on mobile) ─────
-// CHUNK_COLS: columns per frame — larger = faster, smaller = smoother UI
-const _HMT_CHUNK = 128;
-
-async function _hmtBuildCanvasAsync(onProgress) {
+function _hmtBuildCanvas() {
   if(!_hmtProfile) return null;
   const outW = _hmtProfile.length;
-  const outH = Math.max(512, Math.round(outW / 2)); // proportional height: 2:1 ratio, min 512
+  const outH = 512;
   const outC = document.createElement('canvas');
   outC.width = outW; outC.height = outH;
   const ctx  = outC.getContext('2d');
-  const imgd = ctx.createImageData(outW, outH);
-  const d    = imgd.data;
 
-  const totalChunks = Math.ceil(outW / _HMT_CHUNK);
-  for(let chunk = 0; chunk < totalChunks; chunk++) {
-    const x0 = chunk * _HMT_CHUNK;
-    const x1 = Math.min(x0 + _HMT_CHUNK, outW);
-    for(let x = x0; x < x1; x++) {
+  // Process in column chunks so 8K outputs don't exceed ImageData memory limits
+  for(let chunkStart = 0; chunkStart < outW; chunkStart += _HMT_CHUNK) {
+    const chunkW = Math.min(_HMT_CHUNK, outW - chunkStart);
+    const imgd   = ctx.createImageData(chunkW, outH);
+    const d      = imgd.data;
+    for(let ci = 0; ci < chunkW; ci++) {
+      const x    = chunkStart + ci;
       const frac = _hmtProfile[outW - x - 1];
       const cutY = Math.round(outH * (1 - frac));
       for(let y = 0; y < outH; y++) {
-        const idx = (y * outW + x) * 4;
+        const idx = (y * chunkW + ci) * 4;
         d[idx] = d[idx+1] = d[idx+2] = 0;
         d[idx+3] = y >= cutY ? 255 : 0;
       }
     }
-    const pct = ((chunk + 1) / totalChunks) * 90; // 0–90%, last 10% for putImageData
-    if(onProgress) onProgress(pct, `${x1} / ${outW} columns`);
-    // Yield to browser so UI stays responsive
-    await new Promise(r => setTimeout(r, 0));
+    ctx.putImageData(imgd, chunkStart, 0);
   }
-
-  if(onProgress) onProgress(95, 'compositing…');
-  await new Promise(r => setTimeout(r, 0));
-  ctx.putImageData(imgd, 0, 0);
-  if(onProgress) onProgress(100, 'done');
   return outC;
 }
 
@@ -793,25 +758,14 @@ function _hmtUniqueName(base) {
 }
 
 // ── Save to heightmap assets (auto-numbered, injects into HMAP) ─
-async function hmtSaveToAssets() {
+function hmtSaveToAssets() {
   if(!_hmtProfile) { alert('Load a bump map first.'); return; }
   const rawName = (document.getElementById('hmt-out-name').value || 'bumpmap_hm').trim().replace(/\.png$/i, '');
   const uniqueName = _hmtUniqueName(rawName);
   const pngName    = uniqueName + '.png';
 
-  _hmtShowLoading('BUILDING HEIGHTMAP…');
-  let outC;
-  try {
-    outC = await _hmtBuildCanvasAsync((pct, sub) => _hmtUpdateLoading(pct, sub));
-  } catch(e) {
-    _hmtHideLoading();
-    alert('Failed to build heightmap: ' + e);
-    return;
-  }
-  _hmtUpdateLoading(100, 'encoding PNG…');
-  await new Promise(r => setTimeout(r, 0));
-
-  if(!outC) { _hmtHideLoading(); alert('Failed to build heightmap.'); return; }
+  const outC = _hmtBuildCanvas();
+  if(!outC) { alert('Failed to build heightmap.'); return; }
   const dataUrl = outC.toDataURL('image/png');
 
   // Convert to bytes for ZIP export
@@ -819,8 +773,6 @@ async function hmtSaveToAssets() {
   const byteStr = atob(b64);
   const bytes   = new Uint8Array(byteStr.length);
   for(let i = 0; i < byteStr.length; i++) bytes[i] = byteStr.charCodeAt(i);
-
-  _hmtHideLoading();
 
   const entry = { name: pngName, url: dataUrl, type: 'image/png', bytes };
 
@@ -840,24 +792,11 @@ async function hmtSaveToAssets() {
 }
 
 // ── Download PNG directly ─────────────────────────────────────
-async function hmtDownloadPNG() {
+function hmtDownloadPNG() {
   if(!_hmtProfile) { alert('Load a bump map first.'); return; }
   const rawName    = (document.getElementById('hmt-out-name').value || 'bumpmap_hm').trim().replace(/\.png$/i, '');
   const uniqueName = _hmtUniqueName(rawName);
-
-  _hmtShowLoading('BUILDING HEIGHTMAP…');
-  let outC;
-  try {
-    outC = await _hmtBuildCanvasAsync((pct, sub) => _hmtUpdateLoading(pct, sub));
-  } catch(e) {
-    _hmtHideLoading();
-    alert('Failed to build heightmap: ' + e);
-    return;
-  }
-  _hmtUpdateLoading(100, 'encoding PNG…');
-  await new Promise(r => setTimeout(r, 0));
-
-  _hmtHideLoading();
+  const outC = _hmtBuildCanvas();
   if(!outC) return;
   const link = document.createElement('a');
   link.href     = outC.toDataURL('image/png');

@@ -599,21 +599,10 @@ function confirmPreset(){
     const newData = JSON.parse(JSON.stringify(entry.data));
     delete newData.isCenter;
     if(newData.ORBIT_DATA){
-      // Nudge SMA 10% outward so the copy doesn't land on top of the original
-      const existingSMA = parseFloat(newData.ORBIT_DATA.semiMajorAxis) || 0;
-      newData.ORBIT_DATA.semiMajorAxis = existingSMA * 1.1 || 1e8;
+      newData.ORBIT_DATA.SMA = (parseFloat(newData.ORBIT_DATA.SMA) || 0) * 1.1 || 1e8;
     } else {
       const centre = Object.keys(bodies).find(k => bodies[k].isCenter);
-      newData.ORBIT_DATA = {
-        parent:              centre || 'Sun',
-        semiMajorAxis:       1e8,
-        smaDifficultyScale:  {},
-        eccentricity:        0,
-        argumentOfPeriapsis: 0,
-        direction:           1,
-        multiplierSOI:       2.5,
-        soiDifficultyScale:  {}
-      };
+      newData.ORBIT_DATA = { parent: centre || 'Sun', SMA: 1e8, E: 0, direction: 1 };
     }
     bodies[newName] = { preset: entry.preset, data: newData };
     if(typeof drawViewport === 'function') drawViewport();
