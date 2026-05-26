@@ -1,5 +1,4 @@
-# Tutorial 
-(How to start + Features and uses)
+# Tutorial (How to start + Features and uses)
 
 ## How to use Online- (Auto-updated)
 1) Go to the website https://tserieskinda.github.io/Sfs-System-Editor/
@@ -13,7 +12,7 @@ If you're on mobile/weak device You might have to wait a bit more for loading.
 ## How to use without internet (complicated and not autoupdated)
 Skip if using online
 
-1) Download these 3 things-
+1) Download these 3 things
 - All editor files from github (html, css, js) and put them in a folder the same way as this repo's main.
 - Assets Zip https://github.com/Tserieskinda/Sfs-System-Editor/releases/download/v5_0/SFS.Textures.+.Presets.zip
 - (For android) Install Simple HTTP from playstore
@@ -34,18 +33,18 @@ Skip if using online
     ```cd "{yourfilepath}\SFS Editor"```
 - Paste this into the terminal-
     ```python -m http.server 8000```
-- Open your Web broser and go to-
+- Open your Web broser and go to
     ```http://localhost:8000```
 - Upload the textures + presets zip you downloaded, done
 
-# Creating a new system-
+# Creating a new system
 - Select a system centre, you can choose from the many presets available from the zip.
 - Add body- allows you to add a body orbiting whatever you just selected
 - Search tool- download induvidual txt files of the planets in your system or zoom into them if you have lots of bodies.
 - Double click to zoom into a planet
 - Shortcut keys (pc) WASD to move, (you can also use scroll wheel), R to replace, B to add body, Z to zoom and delete key to delete.
 
-### Difficulty Changer-
+### Difficulty Changer
 Allows you to view the solar system in different difficulties
 
 ## Tool bar- has 4 options, 
@@ -55,31 +54,31 @@ Allows you to view the solar system in different difficulties
 3. WASD Speed- adjust speed of camera movement
 4. Icon Size (adjust the size of planet icon when seen from far)
 
-## Editing sidebar- 
+## Editing sidebar 
 Appears when you click on a planet
 has planet editing options like rings, water, terrain, and everything needed to make a custom planet.
 
-### Assets button-
+### Assets button
 allows you to upload custom textures for planet editing
 
-### Settings- 
+### Settings 
 3 background themes if you think the twinkling stars are too boring
 
 ### Clear all,
 Undo- Self explanatory
 
-### System button- 
+### System button 
 Allows to edit things like import settins, space center location and version and author>
 
-### Export button- 
+### Export button 
 Exports the system you just made, make sure to set the space center on a planet or the system wont load.
 
-## Environments (Globe) icon-
+## Environments (Globe) icon
 Allows to disable certain rendering Like
 Disable SOI Circle, Atmosphere, Water, Fog, Post processing,
 Clouds, Front clouds, Surface Texture 
 
-# Open existing system- 
+# Open existing system 
 Used to edit an already made system (1.5+)
 1) Locate the system folder you want to load
 2) Compress it into a zip, like- system.zip
@@ -105,12 +104,12 @@ Used to edit an already made system (1.5+)
 5) Put the textures and hieghtmaps in their respective folders.
 6) Compress the Zip and load it in the editor, your custom preset will appear.
 
-# Terrain-
+# Terrain
 Press terrain button at the topbar to show terrain
 Live hieghtmap updating in Hmap Tab
 Water land interactions(approximate)
 
-# Known Bugs-
+# Known Bugs
 Innacurate SOI
 Cloud related bugs
 Hieghtmap Related bugs
@@ -140,4 +139,5 @@ Thanks to Astray Galaxy and Neverger (creator of tts) and the Celestia community
 Initial Beta testers and contributors- Krameter, Mistiy, ReoreyBoi, Akselajin, Cyn, Cresign, Razan T3, Astray
 Promoter- JJC Aerospace on youtube
 Hieghtmap code learning- Floating Fuel, SFS Forums community
-And everyone on this [**SFS Forums Page*](https://sfsforum.com/index.php?threads/sfs-system-editor-beta.18444/) !
+And everyone on this [**SFS Forums Page**](https://sfsforum.com/index.php?threads/sfs-system-editor-beta.18444/)! 
+enjoy :)
