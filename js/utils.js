@@ -359,9 +359,11 @@ function closeHeightmapTools() {
   document.getElementById('hmt-modal').style.display = 'none';
 }
 
-// Close on backdrop click
-document.getElementById('hmt-modal').addEventListener('mousedown', function(e){
-  if(e.target === this) closeHeightmapTools();
+// Close on backdrop click — deferred so #hmt-modal exists (it's declared after this script tag)
+document.addEventListener('DOMContentLoaded', function() {
+  document.getElementById('hmt-modal').addEventListener('mousedown', function(e){
+    if(e.target === this) closeHeightmapTools();
+  });
 });
 
 function hmtSetTab(tab) {
