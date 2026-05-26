@@ -357,14 +357,10 @@ async function pgGenerate() {
     try { await _autoLoadPromise; } catch(_) {}
   }
 
-  // Verify presets are actually available — "Blank Body" alone isn't enough for a star
-  if (typeof buildAllPresets === 'function') {
-    const all = buildAllPresets();
-    const hasUsable = all.some(p => ['star','planet','moon','gasgiant','ringedgiant','mercurylike','marslike'].includes(p.id));
-    if (!hasUsable) {
-      pgShowStatus('No presets loaded — drop your preset zip onto the editor first.', 'warn');
-      return;
-    }
+  // Verify presets are actually available
+  if (typeof buildAllPresets === 'function' && !buildAllPresets().length) {
+    pgShowStatus('No presets loaded — assets may still be downloading.', 'warn');
+    return;
   }
 
   _pgGenAbort = false;
@@ -632,29 +628,25 @@ function pgPickPreset(type) {
   if (typeof buildAllPresets !== 'function') return null;
   const all = buildAllPresets();
   if (!all.length) return null;
-
-  // Check if type has a specific presetName (star subtypes e.g. 'Sun', 'K', 'Blue Giant')
+  
+  // Check if type has a specific presetName (star subtypes)
   const typeObj = PG.types[type];
   if (typeObj?.presetName) {
     const match = all.find(p => p.name === typeObj.presetName);
     if (match) return match;
-    // Fallback: any star preset
-    const starFallback = all.find(p => p.id === 'star');
-    if (starFallback) return starFallback;
   }
-
+  
   const typeMap = {
-    planet:      ['planet', 'mercurylike', 'marslike', 'gasgiant', 'ringedgiant'],
+    planet:      ['planet', 'mercurylike', 'marslike'],
     moon:        ['moon'],
     asteroid:    ['asteroid'],
-    gasgiant:    ['gasgiant', 'ringedgiant', 'planet'],
+    gasgiant:    ['gasgiant', 'ringedgiant'],
     brown_dwarf: ['star'],
-    blackhole:   ['blackhole', 'star'],
+    blackhole:   ['blackhole'],
   };
-
-  const ids     = typeMap[type] || (typeObj?.isStar ? ['star'] : ['planet', 'moon']);
+  
+  const ids     = typeMap[type] || (typeObj?.isStar ? ['star'] : ['planet']);
   const matches = all.filter(p => ids.includes(p.id));
-  // Always return something — fall back to full pool if no type match
   const pool    = matches.length ? matches : all;
   return pool[Math.floor(Math.random() * pool.length)];
 }
@@ -667,17 +659,9 @@ function pgWeightedPick(pairs) {
 }
 
 function pgWeightedPickWithKind(triples) {
-  // triples: [[key, weight, kind], ...]
-  const total = triples.reduce((s, [, w]) => s + (w || 0), 0);
-  if (total <= 0) {
-    const last = triples[triples.length - 1];
-    return [last[0], last[1], last[2]];
-  }
+  const total = triples.reduce((s, [,,kind,w]) => s + (triples.indexOf([,,kind,w]) === triples.findIndex(t => t[0] === triples[triples.indexOf([,,kind,w])][0] && t[2] === triples[triples.indexOf([,,kind,w])][2]) ? (typeof w === 'number' ? w : triples[triples.indexOf([,,kind,w])][1]) : 0), 0);
   let r = Math.random() * total;
-  for (const [k, w, kind] of triples) {
-    r -= (w || 0);
-    if (r <= 0) return [k, w, kind];
-  }
+  for (const [k, w, kind] of triples) { r -= w; if (r <= 0) return [k, w, kind]; }
   const last = triples[triples.length - 1];
   return [last[0], last[1], last[2]];
 }
